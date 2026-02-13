@@ -1,0 +1,273 @@
+{
+  "id": "earth-seasons",
+  "version": "1.0",
+  "title": "Why Earth Has Seasons",
+  "subject": "Earth and Space Science",
+  "level": "lower-secondary",
+  "verificationStatus": "instructor_approved",
+  "objectives": [
+    {
+      "id": "obj-tilt-and-orbit",
+      "statement": "Describe Earth's approximately 23.5-degree axial tilt and explain that its axis keeps nearly the same direction as Earth orbits the Sun.",
+      "requiredNodeIds": ["axial-tilt", "orbit", "fixed-axis"],
+      "requiredEdgeIds": ["orbit-enables-seasons", "fixed-axis-enables-opposites"]
+    },
+    {
+      "id": "obj-season-mechanisms",
+      "statement": "Explain how axial tilt produces seasons by changing both sunlight angle and day length.",
+      "requiredNodeIds": ["axial-tilt", "sunlight-angle", "energy-concentration", "day-length", "seasons"],
+      "requiredEdgeIds": ["tilt-changes-angle", "angle-changes-concentration", "concentration-causes-seasons", "tilt-changes-day-length", "day-length-causes-seasons"]
+    },
+    {
+      "id": "obj-hemisphere-pattern",
+      "statement": "Explain why the two hemispheres experience opposite seasons and why equatorial seasonal changes are weaker.",
+      "requiredNodeIds": ["hemisphere", "opposite-seasons", "equator-seasons"],
+      "requiredEdgeIds": ["tilt-causes-opposites", "angle-explains-equator"]
+    },
+    {
+      "id": "obj-refute-distance",
+      "statement": "Use evidence to reject changing Earth-Sun distance as the cause of the seasons.",
+      "requiredNodeIds": ["sun-distance", "seasons"],
+      "requiredEdgeIds": ["distance-contrasts-seasons"]
+    }
+  ],
+  "prerequisites": ["orbit", "hemisphere"],
+  "vocabulary": ["axis", "axial tilt", "hemisphere", "orbit", "direct sunlight", "concentrated"],
+  "nodes": [
+    {
+      "id": "axial-tilt",
+      "name": "Earth's axial tilt",
+      "aliases": ["tilt", "earth's tilt", "tilted earth", "23.5 degrees", "23 and a half degrees", "tilted axis"],
+      "definition": "Earth's rotation axis is tilted about 23.5 degrees from the line perpendicular to the plane of its orbit.",
+      "importance": "core"
+    },
+    {
+      "id": "orbit",
+      "name": "Earth's orbit",
+      "aliases": ["orbit", "path around the sun", "goes around the sun", "revolves around the sun", "yearly trip"],
+      "definition": "Earth's orbit is its approximately year-long path around the Sun.",
+      "importance": "core"
+    },
+    {
+      "id": "seasons",
+      "name": "Seasons",
+      "aliases": ["seasons", "summer and winter", "seasonal cycle", "time of year", "seasonal changes"],
+      "definition": "Seasons are yearly patterns in daylight and heating caused mainly by Earth's tilted axis as Earth orbits the Sun.",
+      "importance": "core"
+    },
+    {
+      "id": "sunlight-angle",
+      "name": "Angle of sunlight",
+      "aliases": ["sunlight angle", "direct sunlight", "indirect sunlight", "higher sun", "lower sun", "rays hit straight on", "slanted rays"],
+      "definition": "The angle of sunlight describes how directly the Sun's rays strike a surface; more direct rays arrive at a steeper angle to the ground.",
+      "importance": "core"
+    },
+    {
+      "id": "energy-concentration",
+      "name": "Solar energy concentration",
+      "aliases": ["concentrated sunlight", "concentrated energy", "energy per unit area", "spread-out sunlight", "same energy over a smaller area", "stronger heating"],
+      "definition": "More direct sunlight concentrates incoming solar energy over a smaller surface area, increasing energy received per unit area.",
+      "importance": "core"
+    },
+    {
+      "id": "day-length",
+      "name": "Length of daylight",
+      "aliases": ["day length", "longer days", "shorter days", "more daylight", "fewer daylight hours", "hours of sunlight"],
+      "definition": "Day length is the number of daylight hours in a 24-hour day, which changes seasonally away from the equator.",
+      "importance": "core"
+    },
+    {
+      "id": "hemisphere",
+      "name": "Hemisphere",
+      "aliases": ["hemisphere", "half of the earth", "northern hemisphere", "southern hemisphere", "north half", "south half"],
+      "definition": "A hemisphere is one half of Earth; the equator separates the Northern and Southern Hemispheres.",
+      "importance": "core"
+    },
+    {
+      "id": "opposite-seasons",
+      "name": "Opposite seasons",
+      "aliases": ["opposite seasons", "summer in the north", "winter in the south", "different seasons at once", "australian winter", "hemispheres swap"],
+      "definition": "When one hemisphere is tilted more toward the Sun and has summer conditions, the other is tilted away and has winter conditions.",
+      "importance": "core"
+    },
+    {
+      "id": "sun-distance",
+      "name": "Earth-Sun distance",
+      "aliases": ["distance from the sun", "closer to the sun", "nearer to the sun", "farther from the sun", "further from the sun", "closest to the sun"],
+      "definition": "Earth-Sun distance changes by only about 3 percent over a year, and Earth is nearest the Sun in early January, during Northern Hemisphere winter.",
+      "importance": "core"
+    },
+    {
+      "id": "fixed-axis",
+      "name": "Nearly fixed axis direction",
+      "aliases": ["fixed axis", "axis stays parallel", "points toward polaris", "north star", "same direction in space", "doesn't wobble each season"],
+      "definition": "Across one orbit, Earth's axis remains nearly parallel to itself, with its northern end pointing approximately toward Polaris rather than swinging toward and away from the Sun.",
+      "importance": "supporting"
+    },
+    {
+      "id": "equator-seasons",
+      "name": "Weak seasons near the equator",
+      "aliases": ["equator seasons", "weak seasons", "singapore seasons", "near the equator", "little seasonal change", "almost twelve-hour days"],
+      "definition": "Near the equator, sunlight angle and day length change relatively little through the year, so temperature seasons are usually weaker than at higher latitudes.",
+      "importance": "supporting"
+    },
+    {
+      "id": "solstice",
+      "name": "Solstice",
+      "aliases": ["solstice", "summer solstice", "winter solstice", "longest day", "shortest day", "june solstice", "december solstice"],
+      "definition": "A solstice is one of the two times each year when a hemisphere has its greatest or least amount of daylight.",
+      "importance": "supporting"
+    }
+  ],
+  "edges": [
+    {
+      "id": "tilt-changes-angle",
+      "from": "axial-tilt",
+      "relation": "causes_change_in",
+      "to": "sunlight-angle",
+      "explanation": "As tilted Earth orbits, each hemisphere receives sunlight at changing angles during the year."
+    },
+    {
+      "id": "angle-changes-concentration",
+      "from": "sunlight-angle",
+      "relation": "controls",
+      "to": "energy-concentration",
+      "explanation": "More direct rays spread the Sun's energy over a smaller area, while lower-angle rays spread it over a larger area."
+    },
+    {
+      "id": "concentration-causes-seasons",
+      "from": "energy-concentration",
+      "relation": "contributes_to",
+      "to": "seasons",
+      "explanation": "Seasonal changes in solar energy received per unit area change how strongly the surface is heated."
+    },
+    {
+      "id": "tilt-changes-day-length",
+      "from": "axial-tilt",
+      "relation": "causes_change_in",
+      "to": "day-length",
+      "explanation": "A hemisphere tilted toward the Sun spends more of each rotation in daylight, while the other spends less."
+    },
+    {
+      "id": "day-length-causes-seasons",
+      "from": "day-length",
+      "relation": "contributes_to",
+      "to": "seasons",
+      "explanation": "Longer days allow more time for solar heating each day, while shorter days allow less."
+    },
+    {
+      "id": "tilt-causes-opposites",
+      "from": "axial-tilt",
+      "relation": "causes",
+      "to": "opposite-seasons",
+      "explanation": "Because the hemispheres tilt in opposite directions relative to the Sun, one gains more direct light and longer days while the other loses them."
+    },
+    {
+      "id": "orbit-enables-seasons",
+      "from": "orbit",
+      "relation": "enables",
+      "to": "seasons",
+      "explanation": "Earth's yearly orbit changes which hemisphere is tilted toward the Sun at different times of year."
+    },
+    {
+      "id": "fixed-axis-enables-opposites",
+      "from": "fixed-axis",
+      "relation": "enables",
+      "to": "opposite-seasons",
+      "explanation": "Keeping the axis pointed in nearly one direction makes the hemisphere tilted toward the Sun alternate over opposite sides of the orbit."
+    },
+    {
+      "id": "distance-contrasts-seasons",
+      "from": "sun-distance",
+      "relation": "contrasts_with",
+      "to": "seasons",
+      "explanation": "The small global distance change cannot explain opposite hemispheric seasons, and Earth is nearest the Sun in early January during northern winter."
+    },
+    {
+      "id": "angle-explains-equator",
+      "from": "sunlight-angle",
+      "relation": "explains",
+      "to": "equator-seasons",
+      "explanation": "Near the equator, sunlight remains relatively direct throughout the year, so its angle changes less than at higher latitudes."
+    }
+  ],
+  "misconceptions": [
+    {
+      "id": "mc-distance",
+      "statement": "Seasons happen because Earth is closer to the Sun in summer and farther away in winter.",
+      "detectionHints": ["closer to the sun", "nearer to the sun", "farther from the sun", "further from the sun", "distance from the sun", "close to the sun means summer"],
+      "counterQuestion": "If being closer causes summer, the whole Earth is closer at once, so why is it winter in Australia while it's summer here?",
+      "explanation": "Distance is not the main cause: Earth's distance varies by only about 3 percent, Earth is nearest the Sun in early January during northern winter, and the hemispheres have opposite seasons at the same distance."
+    },
+    {
+      "id": "mc-same-seasons",
+      "statement": "The whole planet experiences the same season at the same time.",
+      "detectionHints": ["the whole earth has summer", "summer everywhere", "winter everywhere", "same season everywhere", "whole planet is in summer", "everyone has the same season"],
+      "counterQuestion": "When it's summer where we are, what season would someone in the other hemisphere say they are having?",
+      "explanation": "The hemispheres experience opposite seasons because when one is tilted toward the Sun, the other is tilted away."
+    },
+    {
+      "id": "mc-wobbling-tilt",
+      "statement": "Earth's axis swings toward the Sun for summer and away from the Sun for winter during each year.",
+      "detectionHints": ["tilt changes during the year", "axis swings toward the sun", "axis swings away", "earth tilts back and forth", "tilts more in summer", "straightens up in winter"],
+      "counterQuestion": "As Earth moves around its orbit, does its axis turn to follow the Sun, or keep pointing toward the same distant direction?",
+      "explanation": "Over a year, Earth's 23.5-degree tilt stays nearly constant and the axis points in nearly the same direction, toward Polaris at its northern end; Earth's orbital position changes which hemisphere faces the Sun more directly."
+    },
+    {
+      "id": "mc-hotter-because-longer-only",
+      "statement": "Summer is warmer only because the days are longer.",
+      "detectionHints": ["only because the days are longer", "just longer days", "day length is the only reason", "more hours is all that matters", "summer is hot because of longer days", "nothing to do with sunlight angle"],
+      "counterQuestion": "At the equator, days stay close to twelve hours all year, so what else should we compare to understand why seasonal heating changes more elsewhere?",
+      "explanation": "Day length matters, but sunlight angle matters too: more direct rays concentrate energy over a smaller area, and longer daylight extends the daily heating time."
+    }
+  ],
+  "transferProbes": [
+    {
+      "id": "tp-no-tilt",
+      "question": "Imagine Earth had no axial tilt but still orbited the Sun. What would happen to its seasons, and why?",
+      "expectedReasoning": "Without axial tilt, each latitude would have nearly the same sunlight angle and day length throughout the year, so tilt-driven seasons would become extremely weak or absent even though Earth still orbited the Sun.",
+      "targetEdgeIds": ["tilt-changes-angle", "angle-changes-concentration", "concentration-causes-seasons", "tilt-changes-day-length", "day-length-causes-seasons"]
+    },
+    {
+      "id": "tp-bigger-tilt",
+      "question": "Uranus has an axial tilt of about 98 degrees. Compared with Earth, what would you predict about its seasons?",
+      "expectedReasoning": "A much larger tilt produces much larger yearly changes in sunlight angle and day length, including long periods when a pole faces toward or away from the Sun, so Uranus has far more extreme seasonal contrasts between its hemispheres.",
+      "targetEdgeIds": ["tilt-changes-angle", "tilt-changes-day-length", "tilt-causes-opposites"]
+    }
+  ],
+  "fallbackQuestions": [
+    {
+      "id": "fq-mechanism",
+      "trigger": "The speaker said direct sunlight or concentrated sunlight but never explained what changes.",
+      "question": "What is different about how the sunlight reaches the ground in summer and winter?"
+    },
+    {
+      "id": "fq-daylength",
+      "trigger": "The sunlight-angle mechanism is established, but day length was never mentioned.",
+      "question": "Does the Sun stay above the horizon for the same amount of time in summer and winter?"
+    },
+    {
+      "id": "fq-opposite",
+      "trigger": "The other hemisphere and opposite seasons were never addressed.",
+      "question": "What would someone in the other half of Earth be experiencing at that same time?"
+    },
+    {
+      "id": "fq-fixed-axis",
+      "trigger": "Axial tilt is established, but the speaker did not explain what changes as Earth moves around its orbit.",
+      "question": "While Earth goes around the Sun, what happens to the direction its axis points?"
+    },
+    {
+      "id": "fq-define-tilt",
+      "trigger": "The speaker said Earth is tilted without saying what the axis is tilted relative to.",
+      "question": "When you say Earth is tilted, what is the axis tilted relative to?"
+    }
+  ],
+  "acceptableSimplifications": [
+    "Treat Earth's orbit as circular when explaining the seasonal mechanism.",
+    "Describe sunlight qualitatively as more direct or less direct without calculating irradiance.",
+    "Ignore atmospheric circulation, clouds, surface properties, and ocean heat transport when explaining the basic astronomical cause.",
+    "Round Earth's axial tilt from about 23.5 degrees to about 23 degrees.",
+    "Describe Earth's axis as fixed in direction over one year, while omitting its very slow precession over thousands of years."
+  ],
+  "referenceSummary": "Earth's seasons are caused mainly by its approximately 23.5-degree axial tilt as it completes its yearly orbit around the Sun. Over one orbit, the axis keeps nearly the same direction in space, with its northern end pointing roughly toward Polaris. When a hemisphere tilts toward the Sun, sunlight strikes it more directly, concentrating solar energy over a smaller area. That hemisphere also has longer days, giving the surface more time to receive energy. Together, greater energy per unit area and longer daylight produce summer conditions; less direct sunlight and shorter days produce winter conditions. The other hemisphere is tilted the opposite way, so Northern and Southern Hemisphere seasons are opposite. Near the equator, sunlight angle and day length vary relatively little, so temperature seasons are weak. Changing Earth-Sun distance does not cause the seasons: the distance varies by only about 3 percent, both hemispheres share that distance, and Earth reaches perihelion, its nearest point to the Sun, in early January during Northern Hemisphere winter."
+}
