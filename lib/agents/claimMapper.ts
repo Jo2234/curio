@@ -184,6 +184,7 @@ async function processBatch(sessionId: string): Promise<void> {
 
   await verifyNewClaims(sessionId);
   await audit(sessionId);
+  await (await import("./learnerModel")).updateBeliefs(sessionId);
   try {
     const pedagogy = await import("./pedagogy");
     const decide = (pedagogy as { decide?: (id: string) => unknown }).decide;
