@@ -15,6 +15,10 @@ type RealtimeEvent = {
   error?: { message?: string };
 };
 
+type SessionSnapshot = {
+  directives?: Directive[];
+};
+
 const SERVER_VAD = {
   type: "server_vad",
   threshold: 0.5,
@@ -40,21 +44,28 @@ export default function VoiceClient({ sessionId }: { sessionId: string }) {
   const [text, setText] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [hasMicrophone, setHasMicrophone] = useState(false);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
 
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const channelRef = useRef<RTCDataChannel | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const micTrackRef = useRef<MediaStreamTrack | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const connectedAtRef = useRef(Date.now());
+  const connectedAtRef = useRef<number | null>(null);
   const pendingDirectivesRef = useRef<Directive[]>([]);
+  const spokenDirectiveIdsRef = useRef(new Set<string>());
   const transcriptEventsRef = useRef(new Set<string>());
   const recordingRef = useRef(false);
   const pushToTalkRef = useRef(true);
   const mutedRef = useRef(false);
   const pttButtonRef = useRef<HTMLButtonElement | null>(null);
+  const deliberateDisconnectRef = useRef(false);
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimerRef = useRef<number | null>(null);
+  const connectingRef = useRef(false);
+  const connectRef = useRef<(() => Promise<void>) | null>(null);
 
-  const tMs = useCallback(() => Math.max(0, Date.now() - connectedAtRef.current), []);
+  const tMs = useCallback(() => Math.max(0, Date.now() - (connectedAtRef.current ?? Date.now())), []);
 
   const sendRealtimeEvent = useCallback((event: object): boolean => {
     const channel = channelRef.current;
@@ -75,6 +86,7 @@ export default function VoiceClient({ sessionId }: { sessionId: string }) {
   }, [sessionId, tMs]);
 
   const sendDirective = useCallback((directive: Directive) => {
+    if (spokenDirectiveIdsRef.current.has(directive.id)) return;
     const sent = sendRealtimeEvent({
       type: "response.create",
       response: {
@@ -82,13 +94,18 @@ export default function VoiceClient({ sessionId }: { sessionId: string }) {
         instructions: directiveInstructions(directive),
       },
     });
-    if (!sent) pendingDirectivesRef.current.push(directive);
+    if (sent) {
+      spokenDirectiveIdsRef.current.add(directive.id);
+    } else if (!pendingDirectivesRef.current.some((pending) => pending.id === directive.id)) {
+      pendingDirectivesRef.current.push(directive);
+    }
   }, [sendRealtimeEvent]);
 
   const closeResources = useCallback(() => {
     recordingRef.current = false;
     setRecording(false);
     setNoviceSpeaking(false);
+    pendingDirectivesRef.current = [];
     channelRef.current?.close();
     channelRef.current = null;
     peerRef.current?.close();
@@ -117,9 +134,24 @@ export default function VoiceClient({ sessionId }: { sessionId: string }) {
       const key = `${isUserTranscript ? "user" : "novice"}:${event.response_id ?? event.item_id ?? ""}:${event.content_index ?? 0}:${event.transcript}`;
       if (!transcriptEventsRef.current.has(key)) {
         transcriptEventsRef.current.add(key);
-        void postTranscript(isUserTranscript ? "user" : "novice", event.transcript).catch((error) => {
-          setNotice(error instanceof Error ? error.message : "The transcript could not be saved.");
-        });
+        const speaker = isUserTranscript ? "user" : "novice";
+        const transcript = event.transcript;
+        void (async () => {
+          try {
+            await postTranscript(speaker, transcript);
+          } catch {
+            transcriptEventsRef.current.delete(key);
+            await new Promise((resolve) => window.setTimeout(resolve, 1_500));
+            if (transcriptEventsRef.current.has(key)) return;
+            transcriptEventsRef.current.add(key);
+            try {
+              await postTranscript(speaker, transcript);
+            } catch (error) {
+              transcriptEventsRef.current.delete(key);
+              setNotice(error instanceof Error ? `${error.message} You can keep teaching; this segment may be missing.` : "A transcript segment could not be saved. You can keep teaching.");
+            }
+          }
+        })();
       }
     }
 
@@ -141,10 +173,29 @@ export default function VoiceClient({ sessionId }: { sessionId: string }) {
     }
   }, [postTranscript]);
 
-  const connect = useCallback(async () => {
-    if (status === "connecting" || status === "connected") return;
+  const scheduleReconnect = useCallback(() => {
+    if (deliberateDisconnectRef.current || reconnectTimerRef.current !== null) return;
+    if (reconnectAttemptsRef.current >= 3) {
+      setStatus("error");
+      setReconnectAttempt(0);
+      setNotice("Voice reconnection failed after 3 attempts. Use Connect Curio to try again.");
+      return;
+    }
+    const attempt = reconnectAttemptsRef.current + 1;
+    reconnectAttemptsRef.current = attempt;
+    setReconnectAttempt(attempt);
     setStatus("connecting");
-    setNotice(null);
+    setNotice(`Voice connection lost. Reconnecting in 2 seconds (${attempt}/3)…`);
+    reconnectTimerRef.current = window.setTimeout(() => {
+      reconnectTimerRef.current = null;
+      void connectRef.current?.();
+    }, 2_000);
+  }, []);
+
+  const connect = useCallback(async () => {
+    if (connectingRef.current || deliberateDisconnectRef.current) return;
+    connectingRef.current = true;
+    setStatus("connecting");
     closeResources();
 
     try {
@@ -158,10 +209,15 @@ export default function VoiceClient({ sessionId }: { sessionId: string }) {
       peerRef.current = peer;
 
       peer.onconnectionstatechange = () => {
-        if (peer.connectionState === "connected") setStatus("connected");
-        if (["failed", "disconnected", "closed"].includes(peer.connectionState)) {
-          setStatus(peer.connectionState === "failed" ? "error" : "disconnected");
+        if (peerRef.current !== peer) return;
+        if (peer.connectionState === "connected") {
+          reconnectAttemptsRef.current = 0;
+          setReconnectAttempt(0);
+          setStatus("connected");
+        }
+        if (["failed", "disconnected"].includes(peer.connectionState)) {
           setNoviceSpeaking(false);
+          scheduleReconnect();
         }
       };
       peer.ontrack = ({ streams }) => {
@@ -190,7 +246,10 @@ export default function VoiceClient({ sessionId }: { sessionId: string }) {
       channelRef.current = channel;
       channel.addEventListener("message", handleRealtimeMessage);
       channel.addEventListener("open", () => {
-        connectedAtRef.current = Date.now();
+        if (peerRef.current !== peer || deliberateDisconnectRef.current) return;
+        if (connectedAtRef.current === null) connectedAtRef.current = Date.now();
+        reconnectAttemptsRef.current = 0;
+        setReconnectAttempt(0);
         setStatus("connected");
         sendRealtimeEvent({
           type: "session.update",
@@ -199,8 +258,14 @@ export default function VoiceClient({ sessionId }: { sessionId: string }) {
             audio: { input: { turn_detection: pushToTalkRef.current ? null : SERVER_VAD } },
           },
         });
-        const queued = pendingDirectivesRef.current.splice(0);
-        queued.forEach(sendDirective);
+        const queued = pendingDirectivesRef.current.splice(0)
+          .filter((directive) => !spokenDirectiveIdsRef.current.has(directive.id));
+        const latest = queued.at(-1);
+        const dropped = latest ? queued.slice(0, -1) : queued;
+        if (dropped.length > 0) {
+          console.warn("Dropping stale queued directives on voice reconnect", dropped.map((directive) => directive.id));
+        }
+        if (latest) sendDirective(latest);
       });
       channel.addEventListener("close", () => setNoviceSpeaking(false));
 
@@ -220,12 +285,31 @@ export default function VoiceClient({ sessionId }: { sessionId: string }) {
       await peer.setRemoteDescription({ type: "answer", sdp: await sdpResponse.text() });
     } catch (error) {
       closeResources();
-      setStatus("error");
-      setNotice(error instanceof Error ? error.message : "Curio could not connect.");
+      if (!deliberateDisconnectRef.current) {
+        setNotice(error instanceof Error ? error.message : "Curio could not connect.");
+        scheduleReconnect();
+      }
+    } finally {
+      connectingRef.current = false;
     }
-  }, [closeResources, handleRealtimeMessage, sendDirective, sendRealtimeEvent, status]);
+  }, [closeResources, handleRealtimeMessage, scheduleReconnect, sendDirective, sendRealtimeEvent]);
+
+  connectRef.current = connect;
+
+  const startConnection = useCallback(() => {
+    deliberateDisconnectRef.current = false;
+    reconnectAttemptsRef.current = 0;
+    setReconnectAttempt(0);
+    setNotice(null);
+    void connect();
+  }, [connect]);
 
   const disconnect = useCallback(() => {
+    deliberateDisconnectRef.current = true;
+    if (reconnectTimerRef.current !== null) window.clearTimeout(reconnectTimerRef.current);
+    reconnectTimerRef.current = null;
+    reconnectAttemptsRef.current = 0;
+    setReconnectAttempt(0);
     closeResources();
     setStatus("disconnected");
     setNotice(null);
@@ -298,8 +382,11 @@ export default function VoiceClient({ sessionId }: { sessionId: string }) {
     const events = new EventSource(`/api/sessions/${encodeURIComponent(sessionId)}/events`);
     events.onmessage = (message) => {
       try {
-        const event = JSON.parse(message.data) as { type?: string; data?: Directive };
-        if (event.type === "directive" && event.data) sendDirective(event.data);
+        const event = JSON.parse(message.data) as { type?: string; data?: Directive | SessionSnapshot };
+        if (event.type === "directive" && event.data && "id" in event.data) sendDirective(event.data);
+        if (event.type === "snapshot" && event.data && "directives" in event.data) {
+          for (const directive of event.data.directives ?? []) sendDirective(directive);
+        }
       } catch {
         // Ignore malformed or unrelated session events.
       }
@@ -335,12 +422,16 @@ export default function VoiceClient({ sessionId }: { sessionId: string }) {
     };
   }, [beginRecording, endRecording]);
 
-  useEffect(() => () => closeResources(), [closeResources]);
+  useEffect(() => () => {
+    deliberateDisconnectRef.current = true;
+    if (reconnectTimerRef.current !== null) window.clearTimeout(reconnectTimerRef.current);
+    closeResources();
+  }, [closeResources]);
 
   const connected = status === "connected";
   const statusLabel = {
     disconnected: "Not connected",
-    connecting: "Connecting",
+    connecting: reconnectAttempt > 0 ? `Reconnecting ${reconnectAttempt}/3` : "Connecting",
     connected: "Connected",
     error: "Connection error",
   }[status];
@@ -403,7 +494,7 @@ export default function VoiceClient({ sessionId }: { sessionId: string }) {
         ) : (
           <button
             type="button"
-            onClick={() => void connect()}
+            onClick={startConnection}
             disabled={status === "connecting"}
             className="h-10 rounded-[4px] border-2 border-[var(--accent)] bg-[var(--accent)] px-4 text-sm font-semibold text-[var(--ink-on-accent)] transition-colors duration-150 hover:bg-[var(--accent-hover)] disabled:cursor-wait disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
           >

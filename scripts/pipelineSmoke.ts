@@ -68,6 +68,22 @@ async function main(): Promise<void> {
     ),
   ];
 
+  addSegment(session.id, {
+    id: nanoid(),
+    sessionId: session.id,
+    speaker: "user",
+    text: "Actually I was wrong — it's the axial tilt that changes how directly sunlight hits us.",
+    tMs: start + cannedSegments.length * 1_000,
+  });
+  await runPipelineTick(session.id);
+  const repairedState = getSessionState(session.id);
+  if (!repairedState) throw new Error("Smoke session disappeared after the repair segment");
+  results.push(assertion(
+    "overlapping axial-tilt repair clears the distance misconception state",
+    repairedState.conceptStates["axial-tilt"] !== "misconceived" &&
+      repairedState.conceptStates["sun-distance"] !== "misconceived",
+  ));
+
   if (results.every(Boolean)) console.log(`PASS — pipeline smoke completed for session ${session.id}`);
   else process.exitCode = 1;
 }
