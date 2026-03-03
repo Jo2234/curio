@@ -11,11 +11,14 @@ function formatTime(tMs: number, startedAtMs: number): string {
 }
 
 export default function TranscriptPanel({ segments }: { segments: TranscriptSegment[] }) {
-  const endRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const followingRef = useRef(true);
   const startedAtMs = segments[0]?.tMs ?? 0;
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    const element = scrollRef.current;
+    if (!element || !followingRef.current) return;
+    element.scrollTo({ top: element.scrollHeight, behavior: "smooth" });
   }, [segments.length]);
 
   return (
@@ -29,7 +32,14 @@ export default function TranscriptPanel({ segments }: { segments: TranscriptSegm
         </span>
       </header>
 
-      <div className="curio-scroll min-h-[280px] flex-1 overflow-y-auto px-5 py-4">
+      <div
+        ref={scrollRef}
+        className="curio-scroll min-h-[280px] flex-1 overflow-y-auto px-5 py-4"
+        onScroll={(event) => {
+          const element = event.currentTarget;
+          followingRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 48;
+        }}
+      >
         {segments.length === 0 ? (
           <div className="grid min-h-full place-items-center px-8 text-center">
             <p className="max-w-md font-[var(--font-display)] text-[20px] leading-8 text-[var(--text-secondary)]">
@@ -60,7 +70,6 @@ export default function TranscriptPanel({ segments }: { segments: TranscriptSegm
             })}
           </ol>
         )}
-        <div ref={endRef} aria-hidden="true" />
       </div>
     </section>
   );
