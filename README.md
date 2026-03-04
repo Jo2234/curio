@@ -46,6 +46,28 @@ Open [http://localhost:3000](http://localhost:3000). Runtime session snapshots a
   syllabus ──► compiler agents ──► inspectable pack draft ──► instructor approval
 ```
 
+## Loop engineering
+
+Curio is an agentic harness, not a learning chatbot with extra personas.
+Each agent maintains distinct state, operates on different evidence, and emits structured output that drives the next stage.
+
+```text
+                   ┌──────────────────────────────────────────────────────┐
+you speak ─► Claim mapper ─► Verifier ─► Coverage ─► Pedagogy ─► Curio asks
+    ▲                                                                     │
+    └──────────────────────────── you answer ◄────────────────────────────┘
+```
+
+The **live loop** extracts an `AtomicClaim`, verifies it against the approved curriculum contract, updates coverage, then asks the pedagogy orchestrator to score candidate questions and emit one `Directive` with its reason recorded. The resulting question and answer begin the next revolution.
+
+The **compile loop** turns sources into a concept graph and misconception probes, passes the draft through a pack critic, and stops for human approval. Its output is a versioned evaluation contract: human judgment compiled once, then executed consistently in every session.
+
+The **learner-model loop** converts claims into beliefs, generates an isolated reverse teach-back, accepts the learner's corrections, and rebuilds those beliefs. Curio's teach-back can only use what the learner taught.
+
+These agents are not theater. `AgentEvent` records what each stage observed or changed; `AtomicClaim` (the claim record) carries testable evidence through verification; and `Directive` is the explicit steering instruction consumed by the novice. Those types make the hand-offs inspectable rather than implicit prompt choreography.
+
+Three context boundaries create three different minds on the same model tiers: the **novice** is knowledge-bounded, the **verifier** is pack-grounded, and the **teach-back generator** is code-isolated from the answer key. A runtime guard rejects reference-model content before teach-back generation, so separation is enforced in code rather than requested in a prompt.
+
 The Next.js App Router hosts the UI and APIs. An in-memory store plus JSON snapshots holds demo sessions; SSE streams server-side agent events to the room; OpenAI Realtime handles live voice; and structured reasoning helpers support both OpenAI and Anthropic providers. Teach-back is deliberately isolated from the reference pack so Curio can reproduce only the learner beliefs it was given.
 
 ## Credits and hackathon disclosure
