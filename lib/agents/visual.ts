@@ -129,12 +129,7 @@ function eventMessage(artifact: Pick<VisualArtifact, "labels" | "ambiguities">):
 }
 
 function hasRecentDirective(state: SessionState, now: number): boolean {
-  if (state.directives.length === 0) return false;
-  if (now - state.session.createdAt < 20_000) return true;
-  if ((recentVisualDirectives.get(state.session.id) ?? 0) > now - 20_000) return true;
-  // Directive timestamps are intentionally absent from the frozen contract. Pedagogy records
-  // its decision as an agent event, which supplies the recency signal for non-visual directives.
-  return state.agentEvents.some((event) => event.agent === "pedagogy" && event.tMs > now - 20_000);
+  return (recentVisualDirectives.get(state.session.id) ?? 0) > now - 20_000;
 }
 
 function pushArrowDirective(sessionId: string): void {

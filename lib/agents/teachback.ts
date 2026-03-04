@@ -62,18 +62,22 @@ The prerequisite names are only labels for assumed prior knowledge; do not inven
 function forbiddenTeachbackStrings(pack: ConceptPack): string[] {
   return [
     pack.referenceSummary,
-    ...pack.edges.map((edge) => edge.explanation),
-    ...pack.misconceptions.map((misconception) => misconception.explanation),
+    ...pack.edges.map((edge) => edge.explanation).filter((value) => value.trim().length > 60),
+    ...pack.misconceptions.map((misconception) => misconception.explanation).filter((value) => value.trim().length > 60),
   ].map((value) => value.trim()).filter(Boolean);
+}
+
+function isolationCollisions(pack: ConceptPack, serializedPrompt: string): string[] {
+  return forbiddenTeachbackStrings(pack).filter((forbidden) => {
+    const jsonEscaped = JSON.stringify(forbidden).slice(1, -1);
+    return serializedPrompt.includes(forbidden) || serializedPrompt.includes(jsonEscaped);
+  });
 }
 
 /** Runtime guard used immediately before the generation call and directly by the negative smoke test. */
 export function assertTeachbackContextIsolation(pack: ConceptPack, serializedPrompt: string): void {
-  for (const forbidden of forbiddenTeachbackStrings(pack)) {
-    const jsonEscaped = JSON.stringify(forbidden).slice(1, -1);
-    if (serializedPrompt.includes(forbidden) || serializedPrompt.includes(jsonEscaped)) {
-      throw new Error("Teach-back isolation violation: forbidden reference knowledge entered the generation context");
-    }
+  if (isolationCollisions(pack, serializedPrompt).length > 0) {
+    throw new Error("Teach-back isolation violation: forbidden reference knowledge entered the generation context");
   }
 }
 
@@ -99,27 +103,101 @@ function buildAllowedContext(pack: ConceptPack, beliefs: LearnerBelief[]): strin
   });
 }
 
+function stripForbiddenContent(beliefs: LearnerBelief[], collisions: string[]): LearnerBelief[] {
+  const strip = (value: string): string => collisions.reduce(
+    (cleaned, forbidden) => cleaned.split(forbidden).join(" "),
+    value,
+  ).replace(/\s+/g, " ").trim();
+  return beliefs.flatMap((belief) => {
+    const statement = strip(belief.statement);
+    if (!statement) return [];
+    const ambiguityNote = belief.ambiguityNote ? strip(belief.ambiguityNote) : undefined;
+    return [{
+      ...belief,
+      statement,
+      ...(ambiguityNote ? { ambiguityNote } : { ambiguityNote: undefined }),
+    }];
+  });
+}
+
+function beliefListFallback(sessionId: string, beliefs: LearnerBelief[], collisions: string[]): Directive {
+  const usedBeliefIds = beliefs.map((belief) => belief.id);
+  const uncertainties = beliefs.flatMap((belief) => belief.ambiguityNote ? [belief.ambiguityNote] : []);
+  const script = [
+    "Here is what I understood from your teaching:",
+    ...beliefs.map((belief) => `- ${belief.statement}`),
+    ...(uncertainties.length > 0 ? ["What still feels unclear:", ...uncertainties.map((item) => `- ${item}`)] : []),
+    "Did I get that right?",
+  ].join("\n");
+  setTeachbackResult(sessionId, { script, usedBeliefIds, uncertainties });
+  emitAgentEvent(sessionId, {
+    id: nanoid(),
+    sessionId,
+    agent: "teachback",
+    message: "Teach-back used a plain belief-list fallback after reference-overlap isolation",
+    tMs: Date.now(),
+    payload: { offendingSubstrings: collisions, usedBeliefIds },
+  });
+  return {
+    id: nanoid(),
+    kind: "teachback",
+    utteranceInstruction: script,
+    reason: "Reverse teach-back recited the learner beliefs after the isolation guard removed unsafe prompt context",
+    targetNodeIds: [...new Set(beliefs.flatMap((belief) => belief.nodeIds))],
+  };
+}
+
 /** Generate a reconstruction from the learner model and physically isolated metadata only. */
 export async function generate(sessionId: string): Promise<Directive> {
   const state = getSessionState(sessionId);
   if (!state) throw new Error(`Unknown session: ${sessionId}`);
   if (state.beliefs.length === 0) throw new Error("Cannot generate a teach-back without learner beliefs");
   const pack = loadPack(state.session.packId);
-  const user = buildAllowedContext(pack, state.beliefs);
-  const serializedPrompt = `${teachbackSystem}\n${user}`;
+  let promptBeliefs = state.beliefs;
+  let user = buildAllowedContext(pack, promptBeliefs);
+  let serializedPrompt = `${teachbackSystem}\n${user}`;
+  const collisions = isolationCollisions(pack, serializedPrompt);
+  if (collisions.length > 0) {
+    for (const offendingSubstring of collisions) {
+      emitAgentEvent(sessionId, {
+        id: nanoid(),
+        sessionId,
+        agent: "teachback",
+        message: `Isolation guard removed verbatim reference overlap: ${offendingSubstring}`,
+        tMs: Date.now(),
+        payload: { offendingSubstring },
+      });
+    }
+    promptBeliefs = stripForbiddenContent(state.beliefs, collisions);
+    user = buildAllowedContext(pack, promptBeliefs);
+    serializedPrompt = `${teachbackSystem}\n${user}`;
+    if (promptBeliefs.length === 0 || isolationCollisions(pack, serializedPrompt).length > 0) {
+      return beliefListFallback(sessionId, state.beliefs, collisions);
+    }
+  }
   assertTeachbackContextIsolation(pack, serializedPrompt);
 
-  const output = await deepJsonCall<TeachbackOutput>({
-    system: teachbackSystem,
-    user,
-    schema: teachbackSchema,
-    maxTokens: 700,
-  });
+  let output: TeachbackOutput;
+  try {
+    output = await deepJsonCall<TeachbackOutput>({
+      system: teachbackSystem,
+      user,
+      schema: teachbackSchema,
+      maxTokens: 700,
+    });
+  } catch (error) {
+    if (collisions.length > 0) return beliefListFallback(sessionId, state.beliefs, collisions);
+    throw error;
+  }
   const script = typeof output.script === "string" ? output.script.trim() : "";
-  if (!script) throw new Error("Teach-back generation returned an empty script");
+  if (!script) {
+    if (collisions.length > 0) return beliefListFallback(sessionId, state.beliefs, collisions);
+    throw new Error("Teach-back generation returned an empty script");
+  }
   const beliefIds = new Set(state.beliefs.map((belief) => belief.id));
   const usedBeliefIds = uniqueValidIds(output.usedBeliefIds, beliefIds);
   if (usedBeliefIds.length === 0) {
+    if (collisions.length > 0) return beliefListFallback(sessionId, state.beliefs, collisions);
     throw new Error("Teach-back generation returned no valid belief provenance");
   }
   const uncertainties = Array.isArray(output.uncertainties)
