@@ -10,7 +10,7 @@ Use Node.js 22 and copy `.env.example` to `.env.local`. For the current OpenAI r
 OPENAI_API_KEY=your_key_here
 REALTIME_MODEL=gpt-realtime
 REASONING_PROVIDER=openai
-REASONING_MODEL=gpt-5.4-mini
+REASONING_MODEL=gpt-5.6-terra
 REASONING_MODEL_DEEP=gpt-5.6-sol
 ```
 
