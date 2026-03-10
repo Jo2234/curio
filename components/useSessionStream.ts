@@ -141,6 +141,7 @@ export function useSessionStream(sessionId: string): SessionStreamState {
       source = new EventSource(`/api/sessions/${encodeURIComponent(sessionId)}/events`);
       source.onopen = () => { retry = 0; };
       source.onmessage = (message) => {
+        if (stopped) return;
         try {
           const event: unknown = JSON.parse(message.data);
           if (isStreamEvent(event)) dispatch(event);
@@ -160,6 +161,11 @@ export function useSessionStream(sessionId: string): SessionStreamState {
     connect();
     return () => {
       stopped = true;
+      if (source) {
+        source.onopen = null;
+        source.onmessage = null;
+        source.onerror = null;
+      }
       source?.close();
       if (reconnectTimer) clearTimeout(reconnectTimer);
     };
