@@ -1,13 +1,13 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { NextRequest } from "next/server";
-import { compilePack, type CompiledPackDraft } from "@/lib/agents/compiler";
+import { assertCompiledDraft, compilePack } from "@/lib/agents/compiler";
+import { saveApprovedPack } from "@/lib/packs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const samplePath = path.join(process.cwd(), "packs", "seasons-syllabus-excerpt.md");
-const outputPath = path.join(process.cwd(), "data", "compiled-pack.json");
 const allowedRoles = new Set([
   "Scope authority (syllabus)",
   "Reference material",
@@ -16,18 +16,6 @@ const allowedRoles = new Set([
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Unexpected compiler error.";
-}
-
-function isDraft(value: unknown): value is CompiledPackDraft {
-  if (!value || typeof value !== "object") return false;
-  const draft = value as Partial<CompiledPackDraft>;
-  return (
-    Array.isArray(draft.objectives) &&
-    Array.isArray(draft.nodes) &&
-    Array.isArray(draft.vocabulary) &&
-    Array.isArray(draft.misconceptions) &&
-    Array.isArray(draft.exclusions)
-  );
 }
 
 export async function GET() {
@@ -70,35 +58,26 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
+  let body: { draft?: unknown; approvedBy?: unknown; sourceText?: unknown; sourceRole?: unknown };
   try {
-    const body = (await request.json()) as { draft?: unknown; approvedBy?: unknown };
-    if (!isDraft(body.draft)) {
-      return Response.json({ error: "The draft is incomplete and was not approved." }, { status: 400 });
+    body = await request.json();
+    if (!body || typeof body !== "object") throw new Error("A draft and its source are required.");
+    if (typeof body.sourceText !== "string" || !body.sourceText.trim() || body.sourceText.length > 50_000) {
+      throw new Error("The draft's source text is required and must be under 50,000 characters.");
     }
-
-    const approvedAt = new Date().toISOString();
-    const approvedBy =
-      typeof body.approvedBy === "string" && body.approvedBy.trim()
-        ? body.approvedBy.trim().slice(0, 80)
-        : "Instructor";
-    const approvedPack = {
-      ...body.draft,
-      verificationStatus: "instructor_approved" as const,
-      approvedBy,
-      approvedAt,
-    };
-
-    await mkdir(path.dirname(outputPath), { recursive: true });
-    const temporaryPath = `${outputPath}.${process.pid}.tmp`;
-    await writeFile(temporaryPath, `${JSON.stringify(approvedPack, null, 2)}\n`, "utf8");
-    await rename(temporaryPath, outputPath);
-
-    return Response.json({ approvedBy, approvedAt });
+    if (typeof body.sourceRole !== "string" || !allowedRoles.has(body.sourceRole)) throw new Error("Choose a valid source role.");
+    assertCompiledDraft(body.draft, body.sourceText);
+  } catch (error) {
+    return Response.json({ error: errorMessage(error) }, { status: 400 });
+  }
+  const approvedBy = typeof body.approvedBy === "string" && body.approvedBy.trim()
+    ? body.approvedBy.trim().slice(0, 80) : "Instructor";
+  try {
+    // Preserve the exact reviewed source with the runtime contract.
+    const result = await saveApprovedPack({ ...body.draft, sourceText: body.sourceText, sourceRole: body.sourceRole }, approvedBy);
+    return Response.json(result);
   } catch (error) {
     console.error("Pack approval failed", error);
-    return Response.json(
-      { error: `Approval could not be saved: ${errorMessage(error)}` },
-      { status: 500 },
-    );
+    return Response.json({ error: `Approval could not be saved: ${errorMessage(error)}` }, { status: 500 });
   }
 }

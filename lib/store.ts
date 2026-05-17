@@ -32,6 +32,9 @@ export interface SessionState {
   visuals: VisualArtifact[];
   /** Index into segments; everything before it has been offered to the claim mapper. */
   claimMapperCursor: number;
+  /** Revision of claim evidence used to avoid regenerating an unchanged learner model. */
+  evidenceRevision: number;
+  beliefRevision?: number;
 }
 
 export interface TeachbackResult {
@@ -47,6 +50,7 @@ export type StoreEvent =
   | { type: "finding"; data: Finding }
   | { type: "concept_state"; data: { nodeId: string; state: ConceptState } }
   | { type: "belief"; data: LearnerBelief }
+  | { type: "beliefs"; data: LearnerBelief[] }
   | { type: "teachback_result"; data: TeachbackResult }
   | { type: "directive"; data: Directive }
   | { type: "agent_event"; data: AgentEvent }
@@ -96,7 +100,7 @@ export function createSession(packId: string, mode: Session["mode"]): SessionSta
   const hintLevelByNode = Object.fromEntries(pack.nodes.map((node) => [node.id, 0])) as Record<string, 0 | 1 | 2>;
 
   const state: SessionState = {
-    session: { id, packId, mode, phase: "setup", createdAt: Date.now(), questionCount: 0, hintLevelByNode },
+    session: { id, packId, mode, phase: "listening", createdAt: Date.now(), questionCount: 0, hintLevelByNode },
     segments: [],
     claims: [],
     findings: [],
@@ -107,6 +111,7 @@ export function createSession(packId: string, mode: Session["mode"]): SessionSta
     directives: [],
     visuals: [],
     claimMapperCursor: 0,
+    evidenceRevision: 0,
   };
 
   sessions.set(id, state);
@@ -124,10 +129,13 @@ export function addSegment(sessionId: string, segment: TranscriptSegment): void 
 }
 
 export function upsertClaim(sessionId: string, claim: AtomicClaim): void {
-  const claims = requireState(sessionId).claims;
+  const state = requireState(sessionId);
+  const claims = state.claims;
   const index = claims.findIndex((item) => item.id === claim.id);
+  if (index >= 0 && JSON.stringify(claims[index]) === JSON.stringify(claim)) return;
   if (index === -1) claims.push(claim);
   else claims[index] = claim;
+  state.evidenceRevision += 1;
   commit(sessionId, { type: "claim", data: claim });
 }
 
@@ -174,6 +182,13 @@ export function upsertBelief(sessionId: string, belief: LearnerBelief): void {
   if (index === -1) beliefs.push(belief);
   else beliefs[index] = belief;
   commit(sessionId, { type: "belief", data: belief });
+}
+
+export function replaceBeliefs(sessionId: string, beliefs: LearnerBelief[], evidenceRevision: number): void {
+  const state = requireState(sessionId);
+  state.beliefs = beliefs;
+  state.beliefRevision = evidenceRevision;
+  commit(sessionId, { type: "beliefs", data: beliefs });
 }
 
 export function setTeachbackResult(sessionId: string, result: TeachbackResult): void {

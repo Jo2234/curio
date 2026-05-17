@@ -28,7 +28,7 @@ function repairedContradictions(
     const repair = claims.find((claim) =>
       claim.status === "verified" &&
       claim.nodeIds.includes(nodeId) &&
-      claim.createdAtMs > contradiction.createdAtMs &&
+      (claim.supersedesClaimId === contradiction.id || claim.createdAtMs >= contradiction.createdAtMs) &&
       claim.nodeIds.some((repairNodeId) => contradiction.nodeIds.includes(repairNodeId)) &&
       (claim.supersedesClaimId === contradiction.id || contradiction.status === "superseded"));
     if (!repair) continue;
@@ -109,9 +109,9 @@ export async function audit(sessionId: string): Promise<void> {
       ));
     if (repair.repaired) downgradeRepairedFindings(sessionId, repair.findingIds);
 
-    if (verifiedClaims.length > 0 && (!hasContradictionEvidence || repair.repaired)) {
+    if (verifiedClaims.length > 0 && contradictedClaims.length === 0 && (!hasContradictionEvidence || repair.repaired)) {
       setConceptState(sessionId, node.id, state.session.hintLevelByNode[node.id] > 0 ? "assisted" : "established");
-    } else if (hasContradictionEvidence && !repair.repaired) {
+    } else if (hasContradictionEvidence && (!repair.repaired || contradictedClaims.length > 0)) {
       setConceptState(sessionId, node.id, "misconceived");
     } else if (pack.prerequisites.includes(node.id)) {
       setConceptState(sessionId, node.id, "assumed");

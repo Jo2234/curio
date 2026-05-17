@@ -2,7 +2,7 @@ import { nanoid } from "nanoid";
 
 import { jsonCall } from "../llm";
 import { loadPack } from "../packs";
-import { emitAgentEvent, getSessionState, upsertBelief } from "../store";
+import { emitAgentEvent, getSessionState, replaceBeliefs } from "../store";
 import type { LearnerBelief } from "../types";
 
 interface BeliefDraft {
@@ -56,13 +56,17 @@ function uniqueStrings(value: unknown, allowed?: Set<string>): string[] {
 }
 
 /** Update the novice's beliefs from claims without importing reference knowledge. */
-export async function updateBeliefs(sessionId: string): Promise<void> {
+async function rebuildBeliefs(sessionId: string): Promise<void> {
   const state = getSessionState(sessionId);
   if (!state) throw new Error(`Unknown session: ${sessionId}`);
+  if (state.beliefRevision === state.evidenceRevision) return;
+  const revision = state.evidenceRevision;
+  const claims = [...state.claims];
+  if (claims.length === 0) {
+    replaceBeliefs(sessionId, [], revision);
+    return;
+  }
   const pack = loadPack(state.session.packId);
-  const representedClaimIds = new Set(state.beliefs.flatMap((belief) => belief.supportingClaimIds));
-  const newClaims = state.claims.filter((claim) =>
-    !representedClaimIds.has(claim.id) || claim.status === "superseded");
   const prerequisiteNames = pack.prerequisites.flatMap((nodeId) => {
     const name = pack.nodes.find((node) => node.id === nodeId)?.name;
     return name ? [name] : [];
@@ -79,7 +83,7 @@ export async function updateBeliefs(sessionId: string): Promise<void> {
         status: belief.status,
         ambiguityNote: belief.ambiguityNote ?? null,
       })),
-      newClaims: newClaims.map((claim) => ({
+      claims: claims.map((claim) => ({
         id: claim.id,
         statement: claim.statement,
         status: claim.status,
@@ -93,8 +97,9 @@ export async function updateBeliefs(sessionId: string): Promise<void> {
   });
 
   const currentIds = new Set(state.beliefs.map((belief) => belief.id));
-  const validClaimIds = new Set(state.claims.map((claim) => claim.id));
-  const validNodeIds = new Set(state.claims.flatMap((claim) => claim.nodeIds));
+  const claimById = new Map(claims.map((claim) => [claim.id, claim]));
+  const validClaimIds = new Set(claimById.keys());
+  const beliefs: LearnerBelief[] = [];
   const usedIds = new Set<string>();
 
   for (const draft of Array.isArray(output.beliefs) ? output.beliefs : []) {
@@ -108,18 +113,23 @@ export async function updateBeliefs(sessionId: string): Promise<void> {
     const status: LearnerBelief["status"] = ["believed", "tentative", "revised"].includes(draft.status)
       ? draft.status
       : "tentative";
-    upsertBelief(sessionId, {
+    const supportingClaimIds = uniqueStrings(draft.supportingClaimIds, validClaimIds);
+    if (supportingClaimIds.length === 0) continue;
+    const validNodeIds = new Set(supportingClaimIds.flatMap((id) => claimById.get(id)!.nodeIds));
+    beliefs.push({
       id,
       sessionId,
       statement: draft.statement.trim(),
-      supportingClaimIds: uniqueStrings(draft.supportingClaimIds, validClaimIds),
+      supportingClaimIds,
       nodeIds: uniqueStrings(draft.nodeIds, validNodeIds),
       status,
       ...(ambiguityNote ? { ambiguityNote } : {}),
     });
   }
 
-  const freshBeliefs = getSessionState(sessionId)?.beliefs ?? [];
+  if (beliefs.length === 0) throw new Error("Learner reconstruction returned no supported beliefs.");
+  replaceBeliefs(sessionId, beliefs, revision);
+  const freshBeliefs = beliefs;
   const tentative = freshBeliefs.filter((belief) => belief.status === "tentative").length;
   emitAgentEvent(sessionId, {
     id: nanoid(),
@@ -129,4 +139,21 @@ export async function updateBeliefs(sessionId: string): Promise<void> {
     tMs: Date.now(),
     payload: { beliefIds: freshBeliefs.map((belief) => belief.id) },
   });
+}
+
+const updates = new Map<string, Promise<void>>();
+
+/** Reconstruct on demand, once per evidence revision, including any concurrent correction. */
+export function updateBeliefs(sessionId: string): Promise<void> {
+  const existing = updates.get(sessionId);
+  if (existing) return existing;
+  const update = Promise.resolve().then(async () => {
+    do {
+      await rebuildBeliefs(sessionId);
+      const state = getSessionState(sessionId);
+      if (!state || state.beliefRevision === state.evidenceRevision) return;
+    } while (true);
+  }).finally(() => updates.delete(sessionId));
+  updates.set(sessionId, update);
+  return update;
 }

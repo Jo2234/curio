@@ -4,6 +4,8 @@ import { listPacks } from "@/lib/packs";
 
 import SetupForm from "./SetupForm";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Set up a session",
   description: "Choose a lesson pack and begin teaching Curio in under thirty seconds.",
@@ -12,7 +14,7 @@ export const metadata: Metadata = {
 export default async function SetupPage({
   searchParams,
 }: {
-  searchParams: Promise<{ mode?: string }>;
+  searchParams: Promise<{ mode?: string; packId?: string }>;
 }) {
   const query = await searchParams;
   const mode = query.mode === "student" ? "student" : "teacher";
@@ -25,5 +27,5 @@ export default async function SetupPage({
     verificationStatus,
   }));
 
-  return <SetupForm packs={packs} initialMode={mode} />;
+  return <SetupForm packs={packs} initialMode={mode} initialPackId={query.packId} />;
 }
