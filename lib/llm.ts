@@ -8,6 +8,7 @@ export interface JsonCallOptions {
   user: string;
   schema: JsonSchema;
   maxTokens?: number;
+  timeoutMs?: number;
 }
 
 export interface VisionCallOptions {
@@ -16,10 +17,12 @@ export interface VisionCallOptions {
   schema: JsonSchema;
   system?: string;
   maxTokens?: number;
+  timeoutMs?: number;
 }
 
 const TOOL_NAME = "return_json";
-const TIMEOUT_MS = 15_000;
+const FAST_TIMEOUT_MS = 15_000;
+const DEEP_TIMEOUT_MS = 90_000;
 
 function provider(): "anthropic" | "openai" {
   return process.env.REASONING_PROVIDER?.toLocaleLowerCase() === "openai" ? "openai" : "anthropic";
@@ -85,7 +88,7 @@ async function anthropicCall<T>(
       }],
       tool_choice: { type: "tool", name: TOOL_NAME },
     },
-    { signal: AbortSignal.timeout(TIMEOUT_MS) },
+    { timeout: options.timeoutMs },
   );
 
   const toolUse = response.content.find((block) => block.type === "tool_use" && block.name === TOOL_NAME);
@@ -118,7 +121,7 @@ async function openAiCall<T>(
         json_schema: { name: TOOL_NAME, strict: true, schema: options.schema },
       },
     },
-    { signal: AbortSignal.timeout(TIMEOUT_MS) },
+    { timeout: options.timeoutMs },
   );
 
   const content = response.choices[0]?.message.content;
@@ -126,13 +129,14 @@ async function openAiCall<T>(
   return parseObject<T>(content);
 }
 
-async function callWithModel<T>(options: JsonCallOptions, selectedModel: string, image?: string): Promise<T> {
+async function callWithModel<T>(options: JsonCallOptions, selectedModel: string, defaultTimeoutMs: number, image?: string): Promise<T> {
+  const requestOptions = { ...options, timeoutMs: options.timeoutMs ?? defaultTimeoutMs };
   let malformedError: unknown;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       return provider() === "openai"
-        ? await openAiCall<T>(options, selectedModel, image)
-        : await anthropicCall<T>(options, selectedModel, image);
+        ? await openAiCall<T>(requestOptions, selectedModel, image)
+        : await anthropicCall<T>(requestOptions, selectedModel, image);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const malformed = /JSON|structured output|required JSON tool/i.test(message);
@@ -144,14 +148,14 @@ async function callWithModel<T>(options: JsonCallOptions, selectedModel: string,
 }
 
 export function jsonCall<T>(options: JsonCallOptions): Promise<T> {
-  return callWithModel<T>(options, model(false));
+  return callWithModel<T>(options, model(false), FAST_TIMEOUT_MS);
 }
 
 /** Quality-critical structured call for teach-back, compiler, and report generation. */
 export function deepJsonCall<T>(options: JsonCallOptions): Promise<T> {
-  return callWithModel<T>(options, model(true));
+  return callWithModel<T>(options, model(true), DEEP_TIMEOUT_MS);
 }
 
-export function visionCall<T>({ image, prompt, schema, system = "Return only the requested structured analysis.", maxTokens }: VisionCallOptions): Promise<T> {
-  return callWithModel<T>({ system, user: prompt, schema, maxTokens }, model(false), image);
+export function visionCall<T>({ image, prompt, schema, system = "Return only the requested structured analysis.", maxTokens, timeoutMs }: VisionCallOptions): Promise<T> {
+  return callWithModel<T>({ system, user: prompt, schema, maxTokens, timeoutMs }, model(false), FAST_TIMEOUT_MS, image);
 }
