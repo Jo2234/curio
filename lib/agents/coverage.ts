@@ -29,6 +29,7 @@ function repairedContradictions(
       claim.status === "verified" &&
       claim.nodeIds.includes(nodeId) &&
       claim.createdAtMs > contradiction.createdAtMs &&
+      claim.nodeIds.some((repairNodeId) => contradiction.nodeIds.includes(repairNodeId)) &&
       (claim.supersedesClaimId === contradiction.id || contradiction.status === "superseded"));
     if (!repair) continue;
     repaired = true;
