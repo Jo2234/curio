@@ -6,9 +6,11 @@ import { advance, decide } from "../lib/agents/pedagogy";
 import { audit } from "../lib/agents/coverage";
 import { verifyNewClaims } from "../lib/agents/verifier";
 import {
+  addBelief,
   addSegment,
   createSession,
   getSessionState,
+  setClaimMapperCursor,
   setPhase,
   upsertClaim,
 } from "../lib/store";
@@ -18,10 +20,9 @@ function pass(message: string): void {
 }
 
 async function main(): Promise<void> {
-  // Missing keys must not prevent the deterministic mapper/verifier/pedagogy path.
-  delete process.env.OPENAI_API_KEY;
-  delete process.env.ANTHROPIC_API_KEY;
-  process.env.REASONING_PROVIDER = "openai";
+  const provider = process.env.REASONING_PROVIDER ?? "anthropic";
+  const liveKey = provider === "openai" ? process.env.OPENAI_API_KEY : process.env.ANTHROPIC_API_KEY;
+  assert(liveKey, `pedagogy smoke requires the live ${provider} key from .env.local`);
 
   const { session } = createSession("earth-seasons", "teacher");
   setPhase(session.id, "listening");
@@ -66,6 +67,14 @@ async function main(): Promise<void> {
 
   const contradiction = state.claims.find((claim) => claim.misconceptionId === "mc-distance");
   assert(contradiction, "the deterministic verifier should create the planted contradicted claim");
+  addBelief(session.id, {
+    id: nanoid(),
+    sessionId: session.id,
+    statement: "Summer happens because Earth is closer to the Sun.",
+    supportingClaimIds: [contradiction.id],
+    nodeIds: contradiction.nodeIds,
+    status: "believed",
+  });
   const repairSegmentId = nanoid();
   const repairText = "Actually it's the tilt — the axis is tilted 23.5 degrees so the sunlight hits at a steeper angle.";
   addSegment(session.id, {
@@ -77,7 +86,7 @@ async function main(): Promise<void> {
   });
 
   // Model the verifier contract explicitly: repair completes only when a verified,
-  // superseding claim lands. This keeps the pedagogy smoke independent of API keys.
+  // superseding claim lands; the live key is then used for belief flush and finale generation.
   upsertClaim(session.id, { ...contradiction, status: "superseded" });
   upsertClaim(session.id, {
     id: nanoid(),
@@ -107,11 +116,44 @@ async function main(): Promise<void> {
   assert.notEqual(state.session.phase, "repair");
   pass("verified repair flips concept state and the same counter-question is not repeated");
 
+  setClaimMapperCursor(session.id, state.segments.length);
+  const recentDirectiveEvent = [...state.agentEvents].reverse().find((event) =>
+    event.agent === "pedagogy" && Boolean((event.payload as { directiveId?: string } | undefined)?.directiveId));
+  assert(recentDirectiveEvent, "the counter-question should have a pedagogy directive event");
+  recentDirectiveEvent.tMs = Date.now() - 5_000;
+
   await advance(session.id, "teachback");
   state = getSessionState(session.id);
   assert(state);
   assert.equal(state.session.phase, "teachback");
-  pass("advance(teachback) enters teachback and safely invokes the optional generator");
+  const teachbackDirective = state.directives.find((directive) => directive.kind === "teachback");
+  assert(teachbackDirective, "teach-back directive must be pushed despite a directive five seconds earlier");
+  pass("teach-back terminal action bypasses the 20-second directive debounce");
+
+  const beliefText = state.beliefs.map((belief) => belief.statement).join(" ").toLocaleLowerCase();
+  assert(
+    beliefText.includes("tilt") || beliefText.includes("axis"),
+    "belief flush should include the repaired axial-tilt statement",
+  );
+  assert(
+    !state.beliefs.some((belief) =>
+      belief.statement.toLocaleLowerCase().includes("closer") && belief.status !== "revised"),
+    "belief flush must not leave the distance misconception as an unrevised belief",
+  );
+  assert(
+    teachbackDirective.utteranceInstruction.toLocaleLowerCase().includes("tilt") ||
+      teachbackDirective.utteranceInstruction.toLocaleLowerCase().includes("axis"),
+    "teach-back should reconstruct the repaired belief, not the stale misconception",
+  );
+  pass("teach-back waits for belief revision and reconstructs the repair");
+
+  await advance(session.id, "finish");
+  state = getSessionState(session.id);
+  assert(state);
+  assert.equal(state.session.phase, "report");
+  const report = (state.session as typeof state.session & { report?: unknown }).report;
+  assert(report, "finishing teach-back should compose and store the report");
+  pass("full finale reaches report and stores the composed report");
 }
 
 void main().catch((error) => {
