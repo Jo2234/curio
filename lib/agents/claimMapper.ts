@@ -72,6 +72,58 @@ function mapNodes(text: string, pack: ConceptPack): string[] {
     .map((node) => node.id);
 }
 
+const REPAIR_CUE = /\b(actually|i was wrong|i am wrong|correction|correct that|not (?:because|due to)|rather than|instead)\b/i;
+
+function relatedNodeIds(nodeIds: string[], pack: ConceptPack): Set<string> {
+  const seeds = new Set(nodeIds);
+  const related = new Set(seeds);
+  for (const edge of pack.edges) {
+    if (seeds.has(edge.from) || seeds.has(edge.to)) {
+      related.add(edge.from);
+      related.add(edge.to);
+    }
+  }
+  return related;
+}
+
+function repairTargetFor(
+  item: ExtractedClaim,
+  sourceText: string,
+  createdAtMs: number,
+  pack: ConceptPack,
+  state: NonNullable<ReturnType<typeof getSessionState>>,
+): AtomicClaim | undefined {
+  const repairText = `${sourceText}\n${item.statement}\n${item.originalText}`;
+  if (!REPAIR_CUE.test(repairText)) return undefined;
+
+  const candidates = state.claims.filter((claim) =>
+    claim.status === "contradicted" && claim.createdAtMs < createdAtMs);
+  if (candidates.length === 0) return undefined;
+
+  const repairNodes = relatedNodeIds([...new Set([...item.nodeIds, ...mapNodes(repairText, pack)])], pack);
+  const scored = candidates.map((claim) => {
+    const findingNodes = state.findings
+      .filter((finding) => finding.claimIds.includes(claim.id))
+      .flatMap((finding) => finding.nodeIds);
+    const misconception = pack.misconceptions.find((candidate) => candidate.id === claim.misconceptionId);
+    const misconceptionText = misconception
+      ? [misconception.statement, misconception.explanation, misconception.counterQuestion, ...misconception.detectionHints].join(" ")
+      : "";
+    const targetNodes = new Set([
+      ...claim.nodeIds,
+      ...findingNodes,
+      ...mapNodes(misconceptionText, pack),
+    ]);
+    const nodeOverlap = [...repairNodes].filter((nodeId) => targetNodes.has(nodeId)).length;
+    const hintOverlap = misconception?.detectionHints.some((hint) =>
+      sourceText.toLocaleLowerCase().includes(hint.toLocaleLowerCase())) ? 1 : 0;
+    return { claim, score: nodeOverlap * 2 + hintOverlap };
+  });
+
+  return scored.sort((left, right) =>
+    right.score - left.score || right.claim.createdAtMs - left.claim.createdAtMs)[0]?.claim;
+}
+
 function fallbackClaims(segments: TranscriptSegment[], pack: ConceptPack): ExtractedClaim[] {
   return segments.flatMap((segment) => segment.text
     .split(/(?<=[.!])\s+/)
@@ -110,27 +162,29 @@ function sanitizeClaims(output: ClaimMapperOutput, segments: TranscriptSegment[]
   });
 }
 
-function upsertExtractedClaims(sessionId: string, extracted: ExtractedClaim[], segments: TranscriptSegment[]): void {
+function upsertExtractedClaims(
+  sessionId: string,
+  extracted: ExtractedClaim[],
+  segments: TranscriptSegment[],
+  pack: ConceptPack,
+): void {
   const segmentById = new Map(segments.map((segment) => [segment.id, segment]));
 
   for (const item of extracted) {
     const state = getSessionState(sessionId);
     if (!state) throw new Error(`Unknown session: ${sessionId}`);
     const createdAtMs = Math.max(...item.segmentIds.map((id) => segmentById.get(id)?.tMs ?? Date.now()));
-    const explicitRepair = /\b(actually|i was wrong|correction|correct that)\b/i.test(`${item.statement} ${item.originalText}`);
-    const repairTarget = explicitRepair
-      ? [...state.claims].reverse().find((claim) =>
-          claim.status === "contradicted" && claim.createdAtMs < createdAtMs)
-      : undefined;
+    const sourceText = item.segmentIds.map((id) => segmentById.get(id)?.text ?? "").join("\n");
+    const repairTarget = repairTargetFor(item, sourceText, createdAtMs, pack, state);
     const nodeIds = [...new Set([...item.nodeIds, ...(repairTarget?.nodeIds ?? [])])];
     const itemNodeIds = new Set(nodeIds);
-    const earlier = itemNodeIds.size > 0
+    const earlier = repairTarget ?? (itemNodeIds.size > 0
       ? [...state.claims].reverse().find((claim) =>
           claim.status === "contradicted" &&
           claim.createdAtMs < createdAtMs &&
           claim.nodeIds.some((nodeId) => itemNodeIds.has(nodeId)) &&
           claim.statement.toLocaleLowerCase() !== item.statement.toLocaleLowerCase())
-      : undefined;
+      : undefined);
 
     if (earlier) upsertClaim(sessionId, { ...earlier, status: "superseded" });
 
@@ -174,7 +228,7 @@ async function processBatch(sessionId: string): Promise<void> {
     extracted = fallbackClaims(segments, pack);
   }
 
-  upsertExtractedClaims(sessionId, extracted, segments);
+  upsertExtractedClaims(sessionId, extracted, segments, pack);
   setClaimMapperCursor(sessionId, endCursor);
   emitAgentEvent(sessionId, {
     id: nanoid(),
