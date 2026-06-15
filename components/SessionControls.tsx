@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import AgentPanel from "@/components/AgentPanel";
 import ClaimLedger from "@/components/ClaimLedger";
-import ConceptMap from "@/components/ConceptMap";
+import ConceptMap, { ConceptMapCompact } from "@/components/ConceptMap";
 import TranscriptPanel from "@/components/TranscriptPanel";
 import { useSessionStream } from "@/components/useSessionStream";
 import VoiceClientImport from "@/components/VoiceClient";
@@ -152,7 +152,7 @@ export default function SessionControls({ sessionId, phase, onAdvance }: { sessi
 
 export function SessionRoom({ sessionId, pack }: { sessionId: string; pack: PackView }) {
   const stream = useSessionStream(sessionId);
-  const [presentationMode, setPresentationMode] = useState(true);
+  const [showHarness, setShowHarness] = useState(false);
   const [noviceSpeaking, setNoviceSpeaking] = useState(false);
   const [advanceError, setAdvanceError] = useState<string | null>(null);
 
@@ -231,6 +231,16 @@ export function SessionRoom({ sessionId, pack }: { sessionId: string; pack: Pack
         .concept-pill[data-state="assumed"]{border-color:var(--concept-assumed);color:var(--text-primary);background:repeating-linear-gradient(135deg,rgba(212,169,86,.32) 0,rgba(212,169,86,.32) 3px,var(--bg-panel) 3px,var(--bg-panel) 7px)}
         .concept-pill[data-state="fragile"]{border-style:dashed;border-color:var(--claim-uncertain);color:var(--claim-uncertain);background:var(--bg-sunken)}
         .concept-pill[data-state="out_of_scope"]{border-color:var(--border);color:var(--text-disabled);background:transparent;opacity:.65}
+        .concept-progress-mark[data-state="unvisited"],.concept-progress-mark[data-state="missing"]{border-style:dashed;border-color:var(--concept-missing);background:transparent}
+        .concept-progress-mark[data-state="established"]{border-color:var(--concept-established);background:var(--concept-established);box-shadow:inset 0 0 0 1px var(--bg-canvas)}
+        .concept-progress-mark[data-state="assisted"]{border-color:var(--concept-assisted);background:var(--concept-assisted)}
+        .concept-progress-mark[data-state="fragile"],.concept-progress-mark[data-state="assumed"]{border-style:dashed;border-color:var(--claim-uncertain);background:var(--bg-sunken)}
+        .concept-progress-mark[data-state="misconceived"]{border-color:var(--concept-misconceived);background:var(--concept-misconceived);clip-path:polygon(0 0,calc(100% - 4px) 0,100% 4px,100% 100%,0 100%)}
+        .concept-progress-mark[data-state="out_of_scope"]{border-color:var(--border);background:transparent;opacity:.5}
+        .calm-presence>.curio-panel,.calm-transcript>.curio-panel{border:0;border-radius:0;background:transparent}
+        .calm-presence>.curio-panel:first-child{border-bottom:2px solid var(--border-strong)}
+        .calm-transcript>.curio-panel:first-child{border-bottom:1px solid var(--border)}
+        @media (min-width:1280px){.calm-presence{flex-direction:row}.calm-presence>.curio-panel:first-child{width:34%;border-right:2px solid var(--border-strong);border-bottom:0}.calm-presence>.voice-mount{width:66%}}
         @keyframes curio-enter{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
         @keyframes curio-rule{from{transform:scaleY(0)}to{transform:scaleY(1)}}
         @keyframes curio-concept{0%{transform:scaleX(.94)}100%{transform:scaleX(1)}}
@@ -249,9 +259,9 @@ export function SessionRoom({ sessionId, pack }: { sessionId: string; pack: Pack
             </div>
           </div>
           <PhaseTrack phase={stream.phase} />
-          <button type="button" role="switch" aria-checked={presentationMode} className="curio-button" onClick={() => setPresentationMode((enabled) => !enabled)}>
-            <span className={`h-3 w-3 border ${presentationMode ? "border-[var(--accent)] bg-[var(--accent)]" : "border-[var(--text-muted)]"}`} aria-hidden="true" />
-            Presentation mode
+          <button type="button" role="switch" aria-checked={showHarness} className="curio-button" onClick={() => setShowHarness((visible) => !visible)}>
+            <span className={`h-3 w-3 border ${showHarness ? "border-[var(--accent)] bg-[var(--accent)]" : "border-[var(--text-muted)]"}`} aria-hidden="true" />
+            {showHarness ? "Hide the harness" : "Show the harness"}
           </button>
           {!reportActive ? <button type="button" className="curio-button curio-button-primary" onClick={() => void advance(teachbackActive ? "finish" : "teachback").catch(() => undefined)}>{teachbackActive ? "Finish → report" : "Finish"}</button> : null}
         </div>
@@ -266,21 +276,32 @@ export function SessionRoom({ sessionId, pack }: { sessionId: string; pack: Pack
           <div className="border-l-[3px] border-[var(--accent)] bg-[var(--bg-evidence)] px-5 py-2 text-[16px] text-[var(--text-secondary)]">Teach freely. I’ll wait for the idea to take shape.</div>
         ) : null}
         {advanceError ? <p role="alert" className="m-0 border-l-[3px] border-[var(--claim-contradicted)] bg-[var(--bg-evidence)] px-5 py-2 text-[14px] text-[var(--claim-contradicted)]">{advanceError}</p> : null}
-        <ConceptMap nodes={pack.nodes} conceptStates={stream.conceptStates} />
-        <div className={`grid min-h-0 gap-3 ${presentationMode ? "xl:grid-cols-12" : "grid-cols-1"}`}>
-          <div className={`${presentationMode ? "xl:col-span-6" : ""} flex min-h-[590px] min-w-0 flex-col gap-3`}>
-            <NovicePresence speaking={noviceSpeaking} />
-            <div className="voice-mount curio-panel px-4 py-2"><VoiceClient sessionId={sessionId} onNoviceSpeakingChange={setNoviceSpeaking} /></div>
-            <TranscriptPanel segments={stream.segments} />
-            <SessionControls sessionId={sessionId} phase={stream.phase} onAdvance={advance} />
-          </div>
-          {presentationMode ? (
+        {showHarness ? <ConceptMap nodes={pack.nodes} conceptStates={stream.conceptStates} /> : <ConceptMapCompact nodes={pack.nodes} conceptStates={stream.conceptStates} />}
+        {showHarness ? (
+          <div className="grid min-h-0 gap-3 xl:grid-cols-12">
+            <div className="flex min-h-[590px] min-w-0 flex-col gap-3 xl:col-span-6">
+              <NovicePresence speaking={noviceSpeaking} />
+              <div className="voice-mount curio-panel px-4 py-2"><VoiceClient sessionId={sessionId} onNoviceSpeakingChange={setNoviceSpeaking} /></div>
+              <TranscriptPanel segments={stream.segments} />
+              <SessionControls sessionId={sessionId} phase={stream.phase} onAdvance={advance} />
+            </div>
             <>
               <div className="min-h-[590px] min-w-0 xl:col-span-3"><AgentPanel agentEvents={stream.agentEvents} directives={stream.directives} /></div>
               <div className="min-h-[590px] min-w-0 xl:col-span-3"><ClaimLedger claims={stream.claims} findings={findings} misconceptionTitles={misconceptionTitles} /></div>
             </>
-          ) : null}
-        </div>
+          </div>
+        ) : (
+          <div className="flex min-h-0 flex-col gap-3">
+            <section className="calm-presence curio-panel flex min-w-0 flex-col xl:min-h-[168px] xl:flex-row" aria-label="Novice and voice controls">
+              <NovicePresence speaking={noviceSpeaking} />
+              <div className="voice-mount flex-1 px-4 py-3"><VoiceClient sessionId={sessionId} onNoviceSpeakingChange={setNoviceSpeaking} /></div>
+            </section>
+            <section className="calm-transcript curio-panel flex min-h-[430px] min-w-0 flex-col" aria-label="Lesson transcript and controls">
+              <TranscriptPanel segments={stream.segments} />
+              <SessionControls sessionId={sessionId} phase={stream.phase} onAdvance={advance} />
+            </section>
+          </div>
+        )}
       </div>
     </main>
   );
