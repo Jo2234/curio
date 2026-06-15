@@ -84,6 +84,54 @@ export function assembleReport(state: SessionState): SessionReport {
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+/**
+ * Reconcile a persisted report with the current session state.
+ *
+ * Report composition is asynchronous and snapshots from older app versions may
+ * contain only part of SessionReport. Treat the stored object as optional
+ * presentation metadata, never as the source of truth for evidence collections.
+ */
+export function normalizeReport(state: SessionState, stored: unknown): SessionReport {
+  const current = assembleReport(state);
+  if (!isRecord(stored)) return current;
+
+  const generatedAt = typeof stored.generatedAt === "number" && Number.isFinite(stored.generatedAt)
+    ? stored.generatedAt
+    : current.generatedAt;
+  const recommendedNextStep = typeof stored.recommendedNextStep === "string" && stored.recommendedNextStep.trim()
+    ? stored.recommendedNextStep
+    : current.recommendedNextStep;
+  const summary = typeof stored.summary === "string" && stored.summary.trim()
+    ? stored.summary
+    : current.summary;
+  const conceptStates = isRecord(stored.conceptStates)
+    ? { ...current.conceptStates, ...stored.conceptStates } as SessionReport["conceptStates"]
+    : current.conceptStates;
+  const hintLevelByNode = isRecord(stored.hintLevelByNode)
+    ? { ...current.hintLevelByNode, ...stored.hintLevelByNode } as SessionReport["hintLevelByNode"]
+    : current.hintLevelByNode;
+
+  return {
+    ...current,
+    generatedAt,
+    recommendedNextStep,
+    ...(summary ? { summary } : {}),
+    conceptStates,
+    hintLevelByNode,
+    // These arrays can continue changing while the conclusion is composed.
+    // Always render one coherent, current snapshot rather than stale copies.
+    claims: [...state.claims],
+    findings: [...state.findings],
+    assumptionDebt: [...state.assumptionDebt],
+    beliefs: [...state.beliefs],
+    segments: [...state.segments],
+  };
+}
+
 export async function compose(sessionId: string): Promise<SessionReport> {
   const state = getSessionState(sessionId);
   if (!state) throw new Error(`Unknown session: ${sessionId}`);

@@ -38,9 +38,25 @@ type StreamEvent =
   | { type: "finding"; data: Finding }
   | { type: "concept_state"; data: { nodeId: string; state: ConceptState } }
   | { type: "belief"; data: LearnerBelief }
+  | { type: "teachback_result"; data: unknown }
   | { type: "directive"; data: Directive }
   | { type: "agent_event"; data: AgentEvent }
+  | { type: "assumption_debt"; data: AssumptionDebtItem }
   | { type: "phase"; data: SessionPhase };
+
+const streamEventTypes = new Set<StreamEvent["type"]>([
+  "snapshot",
+  "segment",
+  "claim",
+  "finding",
+  "concept_state",
+  "belief",
+  "teachback_result",
+  "directive",
+  "agent_event",
+  "assumption_debt",
+  "phase",
+]);
 
 const initialState: SessionStreamState = {
   segments: [],
@@ -82,19 +98,33 @@ function reducer(state: SessionStreamState, event: StreamEvent): SessionStreamSt
       return { ...state, conceptStates: { ...state.conceptStates, [event.data.nodeId]: event.data.state } };
     case "belief":
       return { ...state, beliefs: upsert(state.beliefs, event.data) };
+    case "teachback_result":
+      return state;
     case "directive":
       return { ...state, directives: appendUnique(state.directives, event.data) };
     case "agent_event":
       return { ...state, agentEvents: appendUnique(state.agentEvents, event.data) };
+    case "assumption_debt": {
+      const index = state.assumptionDebt.findIndex((item) =>
+        item.term.toLocaleLowerCase() === event.data.term.toLocaleLowerCase());
+      if (index === -1) return { ...state, assumptionDebt: [...state.assumptionDebt, event.data] };
+      const assumptionDebt = [...state.assumptionDebt];
+      assumptionDebt[index] = event.data;
+      return { ...state, assumptionDebt };
+    }
     case "phase":
       return { ...state, phase: event.data };
+    default:
+      return state;
   }
 }
 
 function isStreamEvent(value: unknown): value is StreamEvent {
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as { type?: unknown; data?: unknown };
-  return typeof candidate.type === "string" && "data" in candidate;
+  return typeof candidate.type === "string" &&
+    streamEventTypes.has(candidate.type as StreamEvent["type"]) &&
+    "data" in candidate;
 }
 
 export function useSessionStream(sessionId: string): SessionStreamState {

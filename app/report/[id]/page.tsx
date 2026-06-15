@@ -4,7 +4,7 @@ import path from "node:path";
 import { notFound } from "next/navigation";
 
 import ReportView from "@/components/ReportView";
-import { assembleReport, type SessionReport } from "@/lib/agents/reportComposer";
+import { normalizeReport, type SessionReport } from "@/lib/agents/reportComposer";
 import { loadPack } from "@/lib/packs";
 import { getSessionState, type SessionState } from "@/lib/store";
 
@@ -35,9 +35,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
 
   const pack = loadPack(state.session.packId);
   const storedReport = state.session.report ?? state.report;
-  const report = storedReport
-    ? { ...storedReport, findings: state.findings, claims: state.claims, segments: state.segments }
-    : assembleReport(state);
+  const report = normalizeReport(state, storedReport);
 
   return <ReportView session={state.session} pack={pack} report={report} />;
 }
