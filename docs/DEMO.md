@@ -24,3 +24,11 @@ If Playwright is installed outside this checkout, set `CURIO_PLAYWRIGHT_MODULE` 
 The script uses a new temporary `CURIO_DATA_DIR`, a synthetic API token and fixture model names. It cleans up the server, browser, local provider and temporary data on completion or error. It never needs a real service key or modifies existing sessions. Output replaces only the three named assets under `docs/media/`.
 
 `media/capture.json` records the build ID, browser version, duration, dimensions, media digest, fixture call stages and zero-call recovery assertion. Assets are original Johan Vaz demonstration material under the project MIT license. Font notices are retained separately in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
+
+## Explanatory narration
+
+The published MP4 now includes English narration and optional embedded captions. [The timed narration script](media/narration.json) records cue windows, actual speech endings, voice provenance, and source/output hashes; [WebVTT captions](media/narration.vtt) are also available. The H.264 video stream is copied unchanged, preserving the recorded actions and their timing.
+
+The voiceover uses a generic synthetic Kokoro `af_heart` voice, generated locally after recording. It explains the interface; it does not demonstrate Curio's Realtime voice feature. The app's voice connection remains disconnected.
+
+The capture command above recreates the silent base recording. Re-time the narration cues if recording timings change, synthesize each cue into its window, then mux the narration and captions while copying the video stream. The original silent asset hash is retained in `capture.json` and `narration.json`; Git history retains that asset. Validation on 13 September 2026 confirmed unchanged video packets, AAC narration, 12 caption cues, and no overlapping or overrun speech windows.
