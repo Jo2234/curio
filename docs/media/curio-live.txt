@@ -1,0 +1,23 @@
+Narrator: Curio tests your explanation by having you teach a learner. This lesson is about seasons.
+
+Curio: Okay, so you're saying summer happens because Earth is closer to the sun.
+
+Narrator: Every claim can be inspected.
+
+Curio: Okay, so the Earth has an axial tilt. If being closer causes summer, the whole Earth is closer at once, so why is it winter in Australia while it's summer here?
+
+Curio: Okay, so you're saying the seasons come from the axial tilt, and in summer our hemisphere is tilted toward the sun so the light is more direct.
+
+Curio: Okay, so you're not sure why the daylight hours change. What is different about how the sunlight reaches the ground in summer and winter?
+
+Narrator: The explanation still has gaps. Finishing asks Curio to teach it back.
+
+Curio: I now understand that Earth has an axial tilt, and it's this tilt that actually causes the seasons instead of the Earth's distance from the sun. When it's summer, our hemisphere is tilted toward the sun, so sunlight hits us more directly. Also, the hours of daylight change during the different seasons. I'm still a bit unclear on exactly how the tilt changes the hours of daylight or the specifics of how direct sunlight works, but I get that the tilt is key and not the Earth being closer or farther from the sun. Did I get that right?
+
+Narrator: The report preserves the learner’s reconstruction and highlights the remaining gaps.
+
+Narrator: The report survives a server restart.
+
+Narrator: The reference answer stays in a separate tab.
+
+Narrator: The session reopens with its saved transcript.

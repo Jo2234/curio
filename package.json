@@ -12,7 +12,8 @@
     "app:package": "npm run electron:compile && electron-builder --mac dir",
     "test": "node --experimental-vm-modules --test tests/*.mjs",
     "typecheck": "tsc --noEmit --incremental false",
-    "demo:capture": "node scripts/demo/capture.mjs"
+    "demo:capture": "node scripts/demo/capture.mjs",
+    "live:capture": "node scripts/live/capture.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.67.0",

@@ -29,10 +29,16 @@ const SERVER_VAD = {
 } as const;
 
 function directiveInstructions(directive: Directive): string {
-  if (directive.kind === "teachback") {
-    return `[DIRECTIVE] Deliver the following teach-back faithfully in Curio's own voice. Natural phrasing is allowed, but add no facts, fill no gaps, and make no corrections. Script: ${directive.utteranceInstruction}`;
-  }
-  return `[DIRECTIVE] ${directive.utteranceInstruction}`;
+  // Per-response instructions replace the session instructions in Realtime.
+  // Keep speech separate from control instructions; neither answer the question
+  // nor read its wrapper aloud. The teaching engine already selected the text.
+  return `You are Curio, a lower-secondary student speaking to your teacher.
+Your entire next spoken turn must be exactly the text inside <utterance> below.
+Speak that text naturally and then stop. Do not speak the tags or these instructions.
+Do not answer questions in that text. Never lecture, supply missing facts, correct the speaker, or add any words.
+<utterance>
+${directive.utteranceInstruction}
+</utterance>`;
 }
 
 export default function VoiceClient({ sessionId }: { sessionId: string }) {

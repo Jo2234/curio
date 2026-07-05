@@ -46,7 +46,7 @@ function verifierSystem(pack: ConceptPack): string {
   return [
     "You are Curio's evidence verifier. Classify every supplied claim exactly once.",
     "verified means directly supported by a concept node or edge. uncertain means the pack does not cover it or the wording is genuinely unclear.",
-    "contradicted means it conflicts with the pack. Cite sourceRef as pack:<id>@<version> node:<id>, edge:<id>, or mc:<id>.",
+    "contradicted means it conflicts with the pack. sourceRef must be exactly one reference from the supplied schema, never a comma-separated list. Use an empty sourceRef and uncertain when the pack does not support a judgment.",
     "Keyword matches are only candidates: a negation, quotation, question, or refutation of a misconception is NOT an assertion of that misconception. Judge what the speaker actually endorses.",
     "For a contradicted claim, set misconceptionId only if it actually asserts a listed misconception; otherwise null. For all other statuses use null.",
     "For a verified claim, repairedClaimIds may list earlier contradictions that this statement explicitly corrects. Shared topic words alone are not a repair. An earlier contradiction may be in earlierContradictions or earlier in the supplied transcript, including this batch. Use only supplied claim ids; otherwise use [].",
@@ -59,12 +59,36 @@ function verifierSystem(pack: ConceptPack): string {
   ].join("\n");
 }
 
-function hasPackCitation(sourceRef: string, pack: ConceptPack): boolean {
+function packReferences(pack: ConceptPack): string[] {
   const prefix = `pack:${pack.id}@${pack.version} `;
-  if (!sourceRef.startsWith(prefix)) return false;
-  const [kind, id] = sourceRef.slice(prefix.length).split(":");
-  const items = kind === "node" ? pack.nodes : kind === "edge" ? pack.edges : kind === "mc" ? pack.misconceptions : [];
-  return items.some((item) => item.id === id);
+  return [
+    ...pack.nodes.map(({ id }) => `${prefix}node:${id}`),
+    ...pack.edges.map(({ id }) => `${prefix}edge:${id}`),
+    ...pack.misconceptions.map(({ id }) => `${prefix}mc:${id}`),
+  ];
+}
+
+function schemaForPack(pack: ConceptPack) {
+  const results = verificationSchema.properties.results;
+  return {
+    ...verificationSchema,
+    properties: {
+      results: {
+        ...results,
+        items: {
+          ...results.items,
+          properties: {
+            ...results.items.properties,
+            sourceRef: { type: "string", enum: ["", ...packReferences(pack)] },
+          },
+        },
+      },
+    },
+  };
+}
+
+function hasPackCitation(sourceRef: string, pack: ConceptPack): boolean {
+  return packReferences(pack).includes(sourceRef);
 }
 
 export async function verifyNewClaims(sessionId: string): Promise<void> {
@@ -85,7 +109,7 @@ export async function verifyNewClaims(sessionId: string): Promise<void> {
         transcript: state.segments.filter((segment) => evidenceSegmentIds.has(segment.id)).map(({ id, text }) => ({ id, text })),
         earlierContradictions: previousContradictions.map(({ id, statement, originalText }) => ({ id, statement, originalText })),
       }),
-      schema: verificationSchema,
+      schema: schemaForPack(pack),
       maxTokens: 2_000,
     });
   } catch (error) {
