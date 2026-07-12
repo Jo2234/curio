@@ -35,11 +35,12 @@ const findingMarks: Record<Finding["type"], string> = {
 };
 
 function duration(session: Session, report: SessionReport): string {
-  const lastEvidence = Math.max(
-    session.createdAt,
-    ...report.segments.map((segment) => segment.tMs),
+  const elapsedTimes = report.segments.map((segment) =>
+    segment.tMs >= 1_000_000_000_000
+      ? segment.tMs - session.createdAt
+      : segment.tMs,
   );
-  const seconds = Math.max(0, Math.floor((lastEvidence - session.createdAt) / 1_000));
+  const seconds = Math.max(0, Math.floor(Math.max(0, ...elapsedTimes) / 1_000));
   const minutes = Math.floor(seconds / 60);
   return minutes ? `${minutes}m ${seconds % 60}s` : `${seconds}s`;
 }

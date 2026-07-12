@@ -196,36 +196,43 @@ async function stopNextServer(): Promise<void> {
     return;
   }
 
-  stoppingServer = new Promise<void>((resolve) => {
-    let finished = false;
-    const finish = () => {
-      if (finished) return;
-      finished = true;
-      nextServer = null;
-      resolve();
-    };
-
-    child.once("exit", finish);
-
+  const pid = child.pid;
+  const isAlive = () => {
     try {
-      if (process.platform === "win32") child.kill("SIGTERM");
-      else process.kill(-child.pid!, "SIGTERM");
+      if (process.platform === "win32") return child.exitCode === null;
+      process.kill(-pid, 0);
+      return true;
     } catch {
-      finish();
-      return;
+      return false;
     }
+  };
+  const signal = (name: NodeJS.Signals) => {
+    try {
+      if (process.platform === "win32") child.kill(name);
+      else process.kill(-pid, name);
+    } catch {
+      // The process group has already exited.
+    }
+  };
+  const waitForExit = async (timeoutMs: number) => {
+    const deadline = Date.now() + timeoutMs;
+    while (isAlive() && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    return !isAlive();
+  };
 
-    setTimeout(() => {
-      if (finished) return;
-      try {
-        if (process.platform === "win32") child.kill("SIGKILL");
-        else process.kill(-child.pid!, "SIGKILL");
-      } catch {
-        // It exited between the timeout and the signal.
-      }
-      setTimeout(finish, 500);
-    }, 2_000).unref();
-  }).finally(() => {
+  stoppingServer = (async () => {
+    signal("SIGTERM");
+    if (!(await waitForExit(2_000))) {
+      signal("SIGKILL");
+      await waitForExit(2_000);
+    }
+    if (isAlive()) {
+      console.error(`Curio could not stop Next process group ${pid}.`);
+    }
+    nextServer = null;
+  })().finally(() => {
     stoppingServer = null;
   });
 
@@ -286,17 +293,20 @@ app.on("activate", () => {
 });
 
 app.on("window-all-closed", () => {
-  app.quit();
+  void stopNextServer().finally(() => app.quit());
 });
 
-app.on("before-quit", (event) => {
-  if (quitAfterCleanup || !nextServer) return;
+function waitForServerBeforeQuit(event: Electron.Event): void {
+  if (quitAfterCleanup || (!nextServer && !stoppingServer)) return;
   event.preventDefault();
   void stopNextServer().finally(() => {
     quitAfterCleanup = true;
     app.quit();
   });
-});
+}
+
+app.on("before-quit", waitForServerBeforeQuit);
+app.on("will-quit", waitForServerBeforeQuit);
 
 process.once("SIGINT", () => {
   void stopNextServer().finally(() => process.exit(0));
