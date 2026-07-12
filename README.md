@@ -8,7 +8,7 @@ Use Node.js 22 and copy `.env.example` to `.env.local`. For the current OpenAI r
 
 ```bash
 OPENAI_API_KEY=your_key_here
-REALTIME_MODEL=gpt-realtime
+REALTIME_MODEL=gpt-realtime-2.1
 REASONING_PROVIDER=openai
 REASONING_MODEL=gpt-5.6-terra
 REASONING_MODEL_DEEP=gpt-5.6-sol
@@ -74,6 +74,6 @@ The Next.js App Router hosts the UI and APIs. An in-memory store plus JSON snaps
 
 Built solo at **BUIDL_OPC_Hackathon_SG** by **Johan Vaz**, orchestrating AI coding agents: **Claude Code (Fable 5, orchestration)** and **OpenAI Codex (GPT-5.6-Sol, implementation)**.
 
-Runtime models: **OpenAI Realtime** for voice and **GPT-5.4-mini / GPT-5.6-Sol** for reasoning agents. Allowed pre-hackathon preparation comprised the product specification, architecture and design documents, wireframes and user flows, and demo-content research. **All code and data were authored during the hacking period.**
+Runtime models: **gpt-realtime-2.1** for voice, **GPT-5.6-Terra** for standard reasoning, and **GPT-5.6-Sol** for deep reasoning. Allowed pre-hackathon preparation comprised the product specification, architecture and design documents, wireframes and user flows, and demo-content research. **All code and data were authored during the hacking period.**
 
 Open-source dependencies include Next.js, React, Tailwind CSS, the OpenAI SDK, the Anthropic SDK, and Nano ID. See `package.json` for exact versions and the complete dependency list.
