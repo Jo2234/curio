@@ -24,6 +24,7 @@ export interface SessionState {
   claims: AtomicClaim[];
   findings: Finding[];
   beliefs: LearnerBelief[];
+  teachbackResult?: TeachbackResult;
   conceptStates: Record<string, ConceptState>;
   assumptionDebt: AssumptionDebtItem[];
   agentEvents: AgentEvent[];
@@ -33,6 +34,12 @@ export interface SessionState {
   claimMapperCursor: number;
 }
 
+export interface TeachbackResult {
+  script: string;
+  usedBeliefIds: string[];
+  uncertainties: string[];
+}
+
 export type StoreEvent =
   | { type: "snapshot"; data: SessionState }
   | { type: "segment"; data: TranscriptSegment }
@@ -40,6 +47,7 @@ export type StoreEvent =
   | { type: "finding"; data: Finding }
   | { type: "concept_state"; data: { nodeId: string; state: ConceptState } }
   | { type: "belief"; data: LearnerBelief }
+  | { type: "teachback_result"; data: TeachbackResult }
   | { type: "directive"; data: Directive }
   | { type: "agent_event"; data: AgentEvent }
   | { type: "assumption_debt"; data: AssumptionDebtItem }
@@ -158,6 +166,19 @@ export function setConceptState(sessionId: string, nodeId: string, state: Concep
 export function addBelief(sessionId: string, belief: LearnerBelief): void {
   requireState(sessionId).beliefs.push(belief);
   commit(sessionId, { type: "belief", data: belief });
+}
+
+export function upsertBelief(sessionId: string, belief: LearnerBelief): void {
+  const beliefs = requireState(sessionId).beliefs;
+  const index = beliefs.findIndex((item) => item.id === belief.id);
+  if (index === -1) beliefs.push(belief);
+  else beliefs[index] = belief;
+  commit(sessionId, { type: "belief", data: belief });
+}
+
+export function setTeachbackResult(sessionId: string, result: TeachbackResult): void {
+  requireState(sessionId).teachbackResult = result;
+  commit(sessionId, { type: "teachback_result", data: result });
 }
 
 export function pushDirective(sessionId: string, directive: Directive): void {
