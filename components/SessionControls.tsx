@@ -23,7 +23,7 @@ const BoardCapture = dynamic(() => import("@/components/BoardCapture"), {
   loading: () => <p className="m-0 text-[14px] text-[var(--text-muted)]">Opening board capture…</p>,
 }) as ComponentType<{ sessionId?: string; onClose?: () => void }>;
 
-type AdvanceAction = "hint" | "teachback";
+type AdvanceAction = "hint" | "teachback" | "finish";
 
 interface PackView {
   title: string;
@@ -140,8 +140,8 @@ export default function SessionControls({ sessionId, phase, onAdvance }: { sessi
         <button type="button" className="curio-button" onClick={() => void run("hint")} disabled={pending !== null}>
           {pending === "hint" ? "Preparing hint…" : "Hint"}
         </button>
-        <button type="button" className="curio-button curio-button-primary ml-auto" onClick={() => void run("teachback")} disabled={pending !== null}>
-          {pending === "teachback" ? "Starting teach-back…" : "Finish & teach-back"}
+        <button type="button" className="curio-button curio-button-primary ml-auto" onClick={() => void run(phase === "teachback" ? "finish" : "teachback")} disabled={pending !== null}>
+          {pending === "finish" ? "Building report…" : pending === "teachback" ? "Starting teach-back…" : phase === "teachback" ? "Finish → report" : "Finish & teach-back"}
         </button>
       </div>
       {boardOpen ? <div className="mt-3 border-t border-[var(--border)] pt-3"><BoardCapture sessionId={sessionId} onClose={() => setBoardOpen(false)} /></div> : null}
@@ -253,7 +253,7 @@ export function SessionRoom({ sessionId, pack }: { sessionId: string; pack: Pack
             <span className={`h-3 w-3 border ${presentationMode ? "border-[var(--accent)] bg-[var(--accent)]" : "border-[var(--text-muted)]"}`} aria-hidden="true" />
             Presentation mode
           </button>
-          {!reportActive ? <button type="button" className="curio-button curio-button-primary" onClick={() => void advance("teachback").catch(() => undefined)}>Finish</button> : null}
+          {!reportActive ? <button type="button" className="curio-button curio-button-primary" onClick={() => void advance(teachbackActive ? "finish" : "teachback").catch(() => undefined)}>{teachbackActive ? "Finish → report" : "Finish"}</button> : null}
         </div>
       </header>
 

@@ -26,6 +26,8 @@ const EXPLANATION_PAUSE_MS = 4_000;
 const LISTENING_MIN_MS = 60_000;
 const LISTENING_MIN_SEGMENTS = 4;
 const MISCONCEPTION_INTERRUPT_SEGMENTS = 2;
+const PIPELINE_FLUSH_TIMEOUT_MS = 10_000;
+const PIPELINE_FLUSH_POLL_MS = 50;
 
 type DirectiveEventPayload = {
   directiveId?: string;
@@ -393,18 +395,33 @@ function normalizeTeachbackDirective(value: unknown): Omit<Directive, "id"> | un
 }
 
 async function enterTeachback(sessionId: string): Promise<void> {
-  const state = getSessionState(sessionId);
+  let state = getSessionState(sessionId);
   if (!state) throw new Error(`Unknown session: ${sessionId}`);
   if (state.session.phase !== "teachback") setPhase(sessionId, "teachback");
   if (state.directives.some((directive) => directive.kind === "teachback")) return;
   try {
+    const targetSegmentCount = state.segments.length;
+    const deadline = Date.now() + PIPELINE_FLUSH_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      state = getSessionState(sessionId);
+      if (!state) throw new Error(`Unknown session: ${sessionId}`);
+      const lastMapperEvent = state.agentEvents.findLastIndex((event) => event.agent === "claim_mapper");
+      const lastLearnerEvent = state.agentEvents.findLastIndex((event) => event.agent === "learner_model");
+      const mappingCaughtUp = state.claimMapperCursor >= targetSegmentCount;
+      const learnerCaughtUp = lastMapperEvent === -1 || lastLearnerEvent > lastMapperEvent;
+      if (mappingCaughtUp && learnerCaughtUp) break;
+      await new Promise((resolve) => setTimeout(resolve, PIPELINE_FLUSH_POLL_MS));
+    }
+    const learnerModel = await import("./learnerModel");
+    await learnerModel.updateBeliefs(sessionId);
+
     const teachbackAgent = await import("./teachback");
     const generate = (teachbackAgent as { generate?: (id: string) => unknown }).generate;
     if (typeof generate !== "function") return;
     const result = await generate(sessionId);
     const directive = normalizeTeachbackDirective(result);
     const fresh = getSessionState(sessionId);
-    if (directive && fresh && !isDebounced(fresh)) pushPedagogyDirective(sessionId, directive, {}, false);
+    if (directive && fresh) pushPedagogyDirective(sessionId, directive, {}, false);
   } catch (error) {
     console.error("Teach-back generation unavailable", error);
   }
@@ -535,13 +552,33 @@ export async function advance(sessionId: string, action: "hint" | "teachback" | 
   if (action === "hint") {
     const pack = loadPack(state.session.packId);
     const repair = unresolvedMisconceptions(state, pack)[0];
-    if (!repair || isDebounced(state)) return;
-    if (state.session.phase !== "repair") setPhase(sessionId, "repair");
-    emitHint(sessionId, repair.misconception, repairTargetNodes(repair.finding, state));
+    if (repair && !isDebounced(state)) {
+      if (state.session.phase !== "repair") setPhase(sessionId, "repair");
+      emitHint(sessionId, repair.misconception, repairTargetNodes(repair.finding, state));
+      return;
+    }
+    const fallback = fallbackQuestion(state, pack);
+    if (fallback) {
+      pushPedagogyDirective(sessionId, {
+        kind: "hint",
+        utteranceInstruction: fallback.question,
+        reason: `H1 nudge: ${fallback.reason}`,
+        targetNodeIds: fallback.targetNodeIds,
+        hintLevel: 1,
+      }, {}, false);
+      return;
+    }
+    emitAgentEvent(sessionId, {
+      id: nanoid(),
+      sessionId,
+      agent: "pedagogy",
+      message: "Nothing to hint on yet — keep teaching",
+      tMs: Date.now(),
+    });
     return;
   }
 
-  if (action === "finish" && state.session.phase === "teachback") {
+  if (action === "finish" || (action === "teachback" && state.session.phase === "teachback")) {
     await enterReport(sessionId);
     return;
   }
