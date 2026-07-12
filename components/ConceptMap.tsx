@@ -60,3 +60,43 @@ export default function ConceptMap({ nodes, conceptStates }: { nodes: ConceptNod
     </section>
   );
 }
+
+export function ConceptMapCompact({ nodes, conceptStates }: { nodes: ConceptNode[]; conceptStates: Record<string, ConceptState> }) {
+  const counts = nodes.reduce<Partial<Record<ConceptState, number>>>((summary, node) => {
+    const state = conceptStates[node.id] ?? "unvisited";
+    summary[state] = (summary[state] ?? 0) + 1;
+    return summary;
+  }, {});
+  const established = counts.established ?? 0;
+  const needsAttention = (counts.fragile ?? 0) + (counts.misconceived ?? 0);
+  const remaining = nodes.length - established;
+
+  return (
+    <section className="curio-panel flex min-h-[58px] items-center gap-4 px-5 py-2.5" aria-labelledby="concept-progress-heading">
+      <div className="shrink-0 border-r-2 border-[var(--border-strong)] pr-4">
+        <h2 id="concept-progress-heading" className="m-0 text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--text-secondary)]">Concept progress</h2>
+        <span className="font-mono text-[11px] text-[var(--text-muted)]">Live learner model</span>
+      </div>
+      {nodes.length === 0 ? (
+        <p className="m-0 text-[14px] text-[var(--text-muted)]">Concept states will appear when the lesson pack is ready.</p>
+      ) : (
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-1" aria-label={`${established} of ${nodes.length} concepts established; ${needsAttention} need attention`}>
+          <p className="m-0 text-[15px] text-[var(--text-primary)]">
+            <strong className="font-semibold text-[var(--concept-established)]">{established} of {nodes.length}</strong> established <span className="text-[var(--text-muted)]">· {remaining} still unfolding</span>
+          </p>
+          {needsAttention > 0 ? (
+            <span className="inline-flex items-center gap-1.5 rounded-[2px] border border-dashed border-[var(--claim-uncertain)] px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--claim-uncertain)]">
+              <span aria-hidden="true">!</span>{needsAttention} need attention
+            </span>
+          ) : null}
+          <div className="ml-auto flex items-center gap-1" aria-hidden="true">
+            {nodes.map((node) => {
+              const state = conceptStates[node.id] ?? "unvisited";
+              return <span key={node.id} className="concept-progress-mark h-2.5 w-5 border" data-state={state} title={`${node.name}: ${stateView[state].label}`} />;
+            })}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
