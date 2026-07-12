@@ -70,10 +70,3 @@ Three context boundaries create three different minds on the same model tiers: t
 
 The Next.js App Router hosts the UI and APIs. An in-memory store plus JSON snapshots holds demo sessions; SSE streams server-side agent events to the room; OpenAI Realtime handles live voice; and structured reasoning helpers support both OpenAI and Anthropic providers. Teach-back is deliberately isolated from the reference pack so Curio can reproduce only the learner beliefs it was given.
 
-## Credits and hackathon disclosure
-
-Built solo at **BUIDL_OPC_Hackathon_SG** by **Johan Vaz**, orchestrating AI coding agents: **Claude Code (Fable 5, orchestration)** and **OpenAI Codex (GPT-5.6-Sol, implementation)**.
-
-Runtime models: **gpt-realtime-2.1** for voice, **GPT-5.6-Terra** for standard reasoning, and **GPT-5.6-Sol** for deep reasoning. Allowed pre-hackathon preparation comprised the product specification, architecture and design documents, wireframes and user flows, and demo-content research. **All code and data were authored during the hacking period.**
-
-Open-source dependencies include Next.js, React, Tailwind CSS, the OpenAI SDK, the Anthropic SDK, and Nano ID. See `package.json` for exact versions and the complete dependency list.
