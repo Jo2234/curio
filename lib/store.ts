@@ -29,6 +29,8 @@ export interface SessionState {
   agentEvents: AgentEvent[];
   directives: Directive[];
   visuals: VisualArtifact[];
+  /** Index into segments; everything before it has been offered to the claim mapper. */
+  claimMapperCursor: number;
 }
 
 export type StoreEvent =
@@ -40,6 +42,7 @@ export type StoreEvent =
   | { type: "belief"; data: LearnerBelief }
   | { type: "directive"; data: Directive }
   | { type: "agent_event"; data: AgentEvent }
+  | { type: "assumption_debt"; data: AssumptionDebtItem }
   | { type: "phase"; data: SessionPhase };
 
 type Subscriber = (event: StoreEvent) => void;
@@ -95,6 +98,7 @@ export function createSession(packId: string, mode: Session["mode"]): SessionSta
     agentEvents: [],
     directives: [],
     visuals: [],
+    claimMapperCursor: 0,
   };
 
   sessions.set(id, state);
@@ -122,6 +126,28 @@ export function upsertClaim(sessionId: string, claim: AtomicClaim): void {
 export function addFinding(sessionId: string, finding: Finding): void {
   requireState(sessionId).findings.push(finding);
   commit(sessionId, { type: "finding", data: finding });
+}
+
+export function upsertFinding(sessionId: string, finding: Finding): void {
+  const findings = requireState(sessionId).findings;
+  const index = findings.findIndex((item) => item.id === finding.id);
+  if (index === -1) findings.push(finding);
+  else findings[index] = finding;
+  commit(sessionId, { type: "finding", data: finding });
+}
+
+export function upsertAssumptionDebt(sessionId: string, item: AssumptionDebtItem): void {
+  const debt = requireState(sessionId).assumptionDebt;
+  const index = debt.findIndex((existing) => existing.term.toLocaleLowerCase() === item.term.toLocaleLowerCase());
+  if (index === -1) debt.push(item);
+  else debt[index] = item;
+  commit(sessionId, { type: "assumption_debt", data: item });
+}
+
+export function setClaimMapperCursor(sessionId: string, cursor: number): void {
+  const state = requireState(sessionId);
+  state.claimMapperCursor = Math.max(state.claimMapperCursor, cursor);
+  snapshot(sessionId);
 }
 
 export function setConceptState(sessionId: string, nodeId: string, state: ConceptState): void {
