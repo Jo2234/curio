@@ -1,0 +1,32 @@
+appId: com.curio.desktop
+productName: Curio
+asar: false
+
+directories:
+  output: dist-app
+
+files:
+  - electron/dist/**/*
+  - .next/**/*
+  - public/**/*
+  - packs/**/*
+  - package.json
+  - "!next.config.ts"
+
+extraMetadata:
+  main: electron/dist/main.js
+
+extraResources:
+  - from: node_modules/typescript
+    to: app/node_modules/typescript
+  - from: .env.local
+    to: app/.env.local
+
+mac:
+  target:
+    - dir
+  identity: null
+  category: public.app-category.education
+  extendInfo:
+    NSMicrophoneUsageDescription: Curio listens while you teach it.
+    NSCameraUsageDescription: Curio looks at your whiteboard when you capture it.
