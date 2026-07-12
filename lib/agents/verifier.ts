@@ -3,7 +3,7 @@ import { nanoid } from "nanoid";
 import { jsonCall } from "../llm";
 import { loadPack } from "../packs";
 import { addFinding, emitAgentEvent, getSessionState, upsertClaim, upsertFinding } from "../store";
-import type { AtomicClaim, ConceptPack, Finding, Misconception } from "../types";
+import type { AtomicClaim, ConceptPack, Misconception } from "../types";
 
 interface VerificationResult {
   claimId: string;
@@ -64,6 +64,7 @@ function deterministicPass(sessionId: string, pack: ConceptPack): void {
 
   for (const misconception of pack.misconceptions) {
     const hitSegments = recentSegments.filter((segment) => hintHit(segment.text, misconception));
+    const misconceptionClaims = state.claims.filter((claim) => claim.misconceptionId === misconception.id);
     const directClaims = state.claims.filter((claim) =>
       ["observed", "uncertain"].includes(claim.status) &&
       userDerived(claim, userSegmentIds) &&
@@ -76,14 +77,10 @@ function deterministicPass(sessionId: string, pack: ConceptPack): void {
 
     if (hitSegments.length === 0 && candidateClaims.length === 0) continue;
 
-    let attachedClaims = candidateClaims;
-    if (attachedClaims.length === 0 && hitSegments.length > 0) {
-      const alreadyDetected = state.claims.some((claim) =>
-        claim.misconceptionId === misconception.id &&
-        claim.segmentIds.some((id) => hitSegments.some((segment) => segment.id === id)));
-      if (alreadyDetected) continue;
+    let canonicalClaim = misconceptionClaims[0] ?? candidateClaims[0];
+    if (!canonicalClaim && hitSegments.length > 0) {
       const segment = hitSegments[0];
-      const claim: AtomicClaim = {
+      canonicalClaim = {
         id: nanoid(),
         sessionId,
         statement: segment.text,
@@ -93,17 +90,40 @@ function deterministicPass(sessionId: string, pack: ConceptPack): void {
         status: "observed",
         createdAtMs: segment.tMs,
       };
-      upsertClaim(sessionId, claim);
-      attachedClaims = [claim];
+    }
+    if (!canonicalClaim) continue;
+
+    const duplicateClaims = [...misconceptionClaims, ...candidateClaims].filter((claim, index, claims) =>
+      claim.id !== canonicalClaim.id && claims.findIndex((candidate) => candidate.id === claim.id) === index);
+    const evidenceClaims = [canonicalClaim, ...duplicateClaims];
+    const previousSegmentIds = new Set(canonicalClaim.segmentIds);
+    const segmentIds = [...new Set([
+      ...evidenceClaims.flatMap((claim) => claim.segmentIds),
+      ...hitSegments.map((segment) => segment.id),
+    ])];
+    const nodeIds = [...new Set([
+      ...evidenceClaims.flatMap((claim) => claim.nodeIds),
+      ...mappedNodes(`${canonicalClaim.statement} ${misconception.statement} ${misconception.explanation}`, pack),
+    ])];
+    const updatedClaim: AtomicClaim = {
+      ...canonicalClaim,
+      segmentIds,
+      nodeIds,
+      status: "contradicted",
+      misconceptionId: misconception.id,
+    };
+    upsertClaim(sessionId, updatedClaim);
+
+    for (const duplicate of duplicateClaims) {
+      // Mapper output can repeat an extracted claim. Keep the audit record, but
+      // prevent it from becoming a second live contradiction or reaching the LLM.
+      upsertClaim(sessionId, {
+        ...duplicate,
+        status: "superseded",
+      });
     }
 
-    for (const claim of attachedClaims) {
-      const inferredNodeIds = claim.nodeIds.length > 0
-        ? claim.nodeIds
-        : mappedNodes(`${claim.statement} ${misconception.statement} ${misconception.explanation}`, pack);
-      claim.nodeIds = inferredNodeIds;
-      upsertClaim(sessionId, { ...claim, nodeIds: inferredNodeIds, status: "contradicted", misconceptionId: misconception.id });
-    }
+    const attachedClaims = [updatedClaim];
 
     const freshState = getSessionState(sessionId);
     if (!freshState) throw new Error(`Unknown session: ${sessionId}`);
@@ -127,19 +147,21 @@ function deterministicPass(sessionId: string, pack: ConceptPack): void {
     } else {
       upsertFinding(sessionId, {
         ...existingFinding,
-        claimIds: [...new Set([...existingFinding.claimIds, ...attachedClaims.map((claim) => claim.id)])],
+        claimIds: [updatedClaim.id],
         segmentIds: [...new Set([...existingFinding.segmentIds, ...hitSegments.map((segment) => segment.id)])],
         nodeIds: [...new Set([...existingFinding.nodeIds, ...attachedClaims.flatMap((claim) => claim.nodeIds)])],
       });
     }
-    emitAgentEvent(sessionId, {
-      id: nanoid(),
-      sessionId,
-      agent: "verifier",
-      message: `Contradiction detected: ${misconception.statement}`,
-      tMs: Date.now(),
-      payload: { misconceptionId: misconception.id },
-    });
+    if (misconceptionClaims.length === 0 || segmentIds.some((id) => !previousSegmentIds.has(id))) {
+      emitAgentEvent(sessionId, {
+        id: nanoid(),
+        sessionId,
+        agent: "verifier",
+        message: `Contradiction detected: ${misconception.statement}`,
+        tMs: Date.now(),
+        payload: { misconceptionId: misconception.id },
+      });
+    }
   }
 
 }

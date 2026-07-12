@@ -44,6 +44,7 @@ export default function VoiceClient({ sessionId }: { sessionId: string }) {
   const [text, setText] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [hasMicrophone, setHasMicrophone] = useState(false);
+  const [microphoneUnavailable, setMicrophoneUnavailable] = useState(false);
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
 
   const peerRef = useRef<RTCPeerConnection | null>(null);
@@ -227,6 +228,9 @@ export default function VoiceClient({ sessionId }: { sessionId: string }) {
       };
 
       try {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw new Error("getUserMedia is not available in this context");
+        }
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
         });
@@ -236,9 +240,11 @@ export default function VoiceClient({ sessionId }: { sessionId: string }) {
         track.enabled = !pushToTalkRef.current && !mutedRef.current;
         peer.addTrack(track, stream);
         setHasMicrophone(true);
+        setMicrophoneUnavailable(false);
       } catch {
         peer.addTransceiver("audio", { direction: "recvonly" });
         setHasMicrophone(false);
+        setMicrophoneUnavailable(true);
         setNotice("Microphone unavailable. You can still teach Curio by typing.");
       }
 
@@ -295,6 +301,10 @@ export default function VoiceClient({ sessionId }: { sessionId: string }) {
   }, [closeResources, handleRealtimeMessage, scheduleReconnect, sendDirective, sendRealtimeEvent]);
 
   connectRef.current = connect;
+
+  useEffect(() => {
+    setMicrophoneUnavailable(!navigator.mediaDevices?.getUserMedia);
+  }, []);
 
   const startConnection = useCallback(() => {
     deliberateDisconnectRef.current = false;
@@ -463,7 +473,7 @@ export default function VoiceClient({ sessionId }: { sessionId: string }) {
             {statusLabel}
           </span>
           <span className="font-mono text-xs text-[var(--text-muted)]">
-            Mic: {muted ? "muted" : recording ? "recording" : hasMicrophone ? "ready" : "unavailable"}
+            Mic: {muted ? "muted" : recording ? "recording" : hasMicrophone ? "ready" : microphoneUnavailable ? "unavailable" : "not connected"}
           </span>
         </div>
 
