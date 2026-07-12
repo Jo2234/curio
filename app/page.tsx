@@ -6,172 +6,156 @@ export const metadata: Metadata = {
 };
 
 const steps = [
-  ["01", "Explain by voice", "Teach naturally. Curio listens for the claims and connections you make."],
-  ["02", "Agents map your claims against the curriculum", "The evidence trail marks what is clear, missing, or uncertain."],
-  ["03", "The novice teaches back only what you taught", "Hear your explanation reconstructed with its gaps left intact."],
+  ["01", "Explain it out loud", "Teach naturally, in your own words."],
+  ["02", "Get one sharp question", "Curio listens for what is clear and what may be missing."],
+  ["03", "Hear it taught back", "Find out what your explanation made a learner believe."],
 ] as const;
 
-const liveLoop = [
-  { label: "You speak", detail: "Your explanation enters as evidence.", color: "var(--accent)" },
-  { label: "Claim mapper", detail: "Extracts atomic claims.", color: "var(--agent-claim)" },
-  { label: "Verifier", detail: "Tests each claim against the compiled curriculum contract.", color: "var(--agent-verifier)" },
-  { label: "Coverage auditor", detail: "Maps what is established, missing, or assumed.", color: "var(--agent-concept)" },
-  { label: "Pedagogy orchestrator", detail: "Scores candidate questions and records why it chose one.", color: "var(--agent-question)" },
-  { label: "Curio", detail: "Asks exactly one question.", color: "var(--agent-curriculum)" },
-  { label: "You answer", detail: "The answer re-enters the loop.", color: "var(--accent)" },
+const minds = [
+  ["The Student", "Only knows what you taught it.", "var(--accent)"],
+  ["The Fact-checker", "Only trusts the approved syllabus.", "var(--claim-verified)"],
+  ["The Mirror", "Never sees the answer key.", "var(--claim-observed)"],
 ] as const;
 
-const compileLoop = ["Sources", "Concept graph", "Misconception probes", "Pack critic", "Human approval", "Versioned evaluation contract"] as const;
-const learnerLoop = ["Claims", "Beliefs", "Reverse teach-back", "Your corrections", "Revised beliefs"] as const;
-
-function LoopSequence({ items }: { items: readonly string[] }) {
-  return (
-    <div className="flex flex-col min-[900px]:flex-row min-[900px]:items-stretch">
-      {items.map((item, index) => (
-        <div key={item} className="contents">
-          <div className="flex min-h-14 flex-1 items-center border border-[var(--border)] bg-[var(--bg-panel)] px-3 py-3 font-mono text-[12px] font-semibold leading-4 text-[var(--text-primary)]">
-            {item}
-          </div>
-          {index < items.length - 1 ? (
-            <span aria-hidden="true" className="flex h-7 shrink-0 items-center justify-center font-mono text-[16px] text-[var(--accent)] min-[900px]:h-auto min-[900px]:w-7"><span className="min-[900px]:hidden">↓</span><span className="hidden min-[900px]:inline">→</span></span>
-          ) : null}
-        </div>
-      ))}
-    </div>
-  );
-}
+const comparisons = [
+  ["Chat AI", "Answers your questions. You stay the listener."],
+  ["Document AI", "Reads your files and summarizes them for you. You stay the reader."],
+  ["Curio", "Makes YOU do the explaining — and shows you exactly what a learner would walk away believing."],
+] as const;
 
 export default function Home() {
   return (
     <main>
-      <section className="mx-auto grid min-h-[calc(100svh-56px)] w-full max-w-[1600px] content-between px-4 py-12 sm:px-5 md:py-16 lg:px-8 lg:py-20">
-        <div className="grid items-end gap-10 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,.65fr)] xl:gap-20">
-          <div>
-            <p className="m-0 font-mono text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--accent)]">The understanding rehearsal</p>
-            <h1 className="mt-4 max-w-[1050px] font-[var(--font-display)] text-[clamp(44px,6.2vw,88px)] font-semibold leading-[.98] tracking-[-0.035em] text-[var(--text-primary)]">
-              Teach it. Get questioned. Discover what you missed.
-            </h1>
+      <section className="mx-auto w-full max-w-[1600px] px-4 py-12 sm:px-5 md:py-16 lg:px-8 lg:py-20">
+        <div className="grid min-h-[calc(100svh-152px)] content-between">
+          <div className="grid items-end gap-10 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,.65fr)] xl:gap-20">
+            <div>
+              <p className="m-0 font-mono text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--accent)]">The understanding rehearsal</p>
+              <h1 className="mt-4 max-w-[1050px] font-[var(--font-display)] text-[clamp(44px,6.2vw,88px)] font-semibold leading-[.98] tracking-[-0.035em] text-[var(--text-primary)]">
+                Teach it. Get questioned. Discover what you missed.
+              </h1>
+            </div>
+            <div className="border-l-2 border-[var(--accent)] pl-5 xl:mb-2">
+              <p className="m-0 max-w-[560px] text-[18px] leading-7 text-[var(--text-secondary)] sm:text-[20px] sm:leading-8">
+                Curio is an AI student that knows nothing until you teach it. It builds a picture of what you actually explained — then teaches it back to you.
+              </p>
+            </div>
           </div>
-          <div className="border-l-2 border-[var(--accent)] pl-5 xl:mb-2">
-            <p className="m-0 max-w-[560px] text-[18px] leading-7 text-[var(--text-secondary)] sm:text-[20px] sm:leading-8">
-              Curio is an AI student that knows nothing until you teach it. It builds a model of what you actually explained — then teaches it back to you.
-            </p>
+
+          <div className="mt-14 lg:mt-20">
+            <div className="grid border-y-2 border-[var(--border-strong)] bg-[var(--bg-evidence)] md:grid-cols-3">
+              {steps.map(([number, title, detail], index) => (
+                <article key={number} className={`grid min-h-[150px] grid-cols-[48px_1fr] gap-3 px-4 py-6 sm:px-5 ${index ? "border-t border-[var(--border)] md:border-l md:border-t-0" : ""}`}>
+                  <span className="font-mono text-[12px] font-semibold tabular-nums text-[var(--accent)]">{number}</span>
+                  <div>
+                    <h2 className="m-0 font-[var(--font-display)] text-[22px] font-semibold leading-7">{title}</h2>
+                    <p className="mb-0 mt-3 max-w-[380px] text-[16px] leading-6 text-[var(--text-secondary)]">{detail}</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+              <Link href="/setup?mode=teacher" className="inline-flex min-h-12 items-center justify-center rounded-[4px] border-2 border-[var(--accent)] bg-[var(--accent)] px-5 text-[16px] font-semibold text-[var(--ink-on-accent)] no-underline transition-colors duration-150 hover:border-[var(--accent-hover)] hover:bg-[var(--accent-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]">
+                Crash-test a lesson <span className="ml-3" aria-hidden="true">→</span>
+              </Link>
+              <Link href="/setup?mode=student" className="inline-flex min-h-12 items-center justify-center rounded-[4px] border-2 border-[var(--border-strong)] bg-[var(--bg-panel)] px-5 text-[16px] font-semibold text-[var(--text-primary)] no-underline transition-colors duration-150 hover:border-[var(--accent)] hover:bg-[var(--bg-raised)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]">
+                Test my understanding <span className="ml-3" aria-hidden="true">→</span>
+              </Link>
+            </div>
+
+            <div className="mt-12 flex flex-col justify-between gap-4 border-y border-[var(--border)] px-1 py-4 text-[14px] text-[var(--text-secondary)] sm:flex-row sm:items-center">
+              <Link href="/compiler" className="w-fit border-b border-transparent no-underline transition-colors hover:border-[var(--accent)] hover:text-[var(--text-primary)]">Turn your curriculum into an understanding test →</Link>
+              <Link href="/review" className="w-fit border-b border-transparent no-underline transition-colors hover:border-[var(--accent)] hover:text-[var(--text-primary)]">Teacher review</Link>
+            </div>
           </div>
         </div>
 
-        <div className="mt-14 lg:mt-20">
-          <div className="grid border-y-2 border-[var(--border-strong)] bg-[var(--bg-evidence)] md:grid-cols-3">
-            {steps.map(([number, title, detail], index) => (
-              <article key={number} className={`grid min-h-[180px] grid-cols-[48px_1fr] gap-3 px-4 py-6 sm:px-5 ${index ? "border-t border-[var(--border)] md:border-l md:border-t-0" : ""}`}>
-                <span className="font-mono text-[12px] font-semibold tabular-nums text-[var(--accent)]">{number}</span>
-                <div>
-                  <h2 className="m-0 font-[var(--font-display)] text-[22px] font-semibold leading-7">{title}</h2>
-                  <p className="mb-0 mt-3 max-w-[380px] text-[15px] leading-6 text-[var(--text-secondary)]">{detail}</p>
+        <section aria-labelledby="how-it-works-title" className="mt-20 border-y-2 border-[var(--border-strong)] bg-[var(--bg-evidence)] lg:mt-28">
+          <header className="border-b-2 border-[var(--border-strong)] px-4 py-8 sm:px-6 lg:px-8">
+            <p className="m-0 font-mono text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--accent)]">Three simple steps</p>
+            <h2 id="how-it-works-title" className="mb-0 mt-3 font-[var(--font-display)] text-[clamp(34px,4vw,52px)] font-semibold leading-[1.05] tracking-[-0.025em] text-[var(--text-primary)]">How it works</h2>
+          </header>
+
+          <div className="grid lg:grid-cols-3">
+            <article className="flex min-h-[460px] flex-col border-b border-[var(--border)] p-5 sm:p-7 lg:border-b-0 lg:border-r lg:p-8">
+              <span className="font-mono text-[12px] font-semibold text-[var(--accent)]">01</span>
+              <div aria-hidden="true" className="my-8 flex min-h-[150px] items-center justify-center border-y border-[var(--border)] bg-[var(--bg-panel)] px-5">
+                <div className="relative flex h-[96px] w-[96px] shrink-0 items-center justify-center rounded-full border-2 border-[var(--accent)]">
+                  <div className="h-[56px] w-[36px] shrink-0 rounded-[18px] border-2 border-[var(--text-primary)]" />
+                  <div className="absolute bottom-[12px] h-[16px] w-[48px] rounded-b-full border-b-2 border-x-2 border-[var(--text-primary)]" />
+                  <div className="absolute -left-8 flex items-center gap-1"><i className="block h-4 w-[2px] bg-[var(--accent)]" /><i className="block h-8 w-[2px] bg-[var(--accent)]" /><i className="block h-5 w-[2px] bg-[var(--accent)]" /></div>
+                  <div className="absolute -right-8 flex items-center gap-1"><i className="block h-5 w-[2px] bg-[var(--accent)]" /><i className="block h-8 w-[2px] bg-[var(--accent)]" /><i className="block h-4 w-[2px] bg-[var(--accent)]" /></div>
                 </div>
-              </article>
-            ))}
-          </div>
-
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-            <Link href="/setup?mode=teacher" className="inline-flex min-h-12 items-center justify-center rounded-[4px] border-2 border-[var(--accent)] bg-[var(--accent)] px-5 text-[16px] font-semibold text-[var(--ink-on-accent)] no-underline transition-colors duration-150 hover:border-[var(--accent-hover)] hover:bg-[var(--accent-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]">
-              Crash-test a lesson <span className="ml-3" aria-hidden="true">→</span>
-            </Link>
-            <Link href="/setup?mode=student" className="inline-flex min-h-12 items-center justify-center rounded-[4px] border-2 border-[var(--border-strong)] bg-[var(--bg-panel)] px-5 text-[16px] font-semibold text-[var(--text-primary)] no-underline transition-colors duration-150 hover:border-[var(--accent)] hover:bg-[var(--bg-raised)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]">
-              Test my understanding <span className="ml-3" aria-hidden="true">→</span>
-            </Link>
-          </div>
-
-          <div className="mt-12 flex flex-col justify-between gap-4 border-y border-[var(--border)] px-1 py-4 text-[14px] text-[var(--text-secondary)] sm:flex-row sm:items-center">
-            <Link href="/compiler" className="w-fit border-b border-transparent no-underline transition-colors hover:border-[var(--accent)] hover:text-[var(--text-primary)]">Compile your own curriculum into an understanding test →</Link>
-            <Link href="/review" className="w-fit border-b border-transparent no-underline transition-colors hover:border-[var(--accent)] hover:text-[var(--text-primary)]">Expert review console</Link>
-          </div>
-
-          <section id="loop-engineering" aria-labelledby="loop-engineering-title" className="mt-20 border-y-2 border-[var(--border-strong)] bg-[var(--bg-evidence)] lg:mt-24">
-            <header className="border-b-2 border-[var(--border-strong)] px-4 py-8 sm:px-6 lg:px-8">
-              <p className="m-0 font-mono text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--accent)]">System docket / 04</p>
-              <h2 id="loop-engineering-title" className="mb-0 mt-3 max-w-[900px] font-[var(--font-display)] text-[clamp(30px,4vw,48px)] font-semibold leading-[1.08] tracking-[-0.025em] text-[var(--text-primary)]">
-                Under the hood: a loop-engineering harness
-              </h2>
-              <p className="mb-0 mt-4 max-w-[780px] text-[16px] leading-6 text-[var(--text-secondary)] sm:text-[18px] sm:leading-7">
-                Specialized agents steer the same underlying models through differently bounded roles. Each structured output becomes the next loop&apos;s steering input.
-              </p>
-            </header>
-
-            <article className="border-b border-[var(--border)] px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
-              <div className="mb-5 flex items-baseline gap-3">
-                <span className="font-mono text-[12px] font-semibold text-[var(--accent)]">LOOP 01</span>
-                <h3 className="m-0 font-[var(--font-display)] text-[22px] font-semibold leading-7">The live loop</h3>
               </div>
-              <div className="flex flex-col min-[900px]:flex-row min-[900px]:items-stretch">
-                {liveLoop.map((item, index) => (
-                  <div key={item.label} className="contents">
-                    <div className="min-h-[112px] flex-1 border border-[var(--border)] bg-[var(--bg-panel)] p-3" style={{ borderTop: `3px solid ${item.color}` }}>
-                      <span className="inline-flex rounded-[2px] border px-2 py-1 font-mono text-[11px] font-semibold uppercase leading-4 tracking-[0.06em]" style={{ borderColor: item.color, color: item.color }}>
-                        {item.label}
-                      </span>
-                      <p className="mb-0 mt-3 text-[13px] leading-5 text-[var(--text-secondary)]">{item.detail}</p>
-                    </div>
-                    {index < liveLoop.length - 1 ? (
-                      <span aria-hidden="true" className="flex h-8 shrink-0 items-center justify-center font-mono text-[18px] text-[var(--accent)] min-[900px]:h-auto min-[900px]:w-7">
-                        <span className="min-[900px]:hidden">↓</span><span className="hidden min-[900px]:inline">→</span>
-                      </span>
-                    ) : null}
+              <h3 className="m-0 font-[var(--font-display)] text-[28px] font-semibold leading-8">You teach it</h3>
+              <p className="mb-0 mt-4 text-[18px] leading-7 text-[var(--text-secondary)]">Curio is a student that knows nothing until you explain it. Out loud, in your own words — whiteboard optional.</p>
+            </article>
+
+            <article className="flex min-h-[460px] flex-col border-b border-[var(--border)] p-5 sm:p-7 lg:border-b-0 lg:border-r lg:p-8">
+              <span className="font-mono text-[12px] font-semibold text-[var(--claim-verified)]">02</span>
+              <div aria-hidden="true" className="my-8 grid min-h-[150px] content-center gap-2 border-y border-[var(--border)] bg-[var(--bg-panel)] px-4 py-5">
+                {[
+                  "Your words",
+                  "Split into claims",
+                  "Checked against the teacher-approved syllabus",
+                  "One sharp question back",
+                ].map((item, index) => (
+                  <div key={item} className="flex items-center gap-2">
+                    <span className={`flex min-h-8 flex-1 items-center border px-3 py-2 font-mono text-[11px] font-semibold leading-4 ${index === 3 ? "border-[var(--accent)] bg-[var(--accent)] text-[var(--ink-on-accent)]" : "border-[var(--border-strong)] text-[var(--text-primary)]"}`}>{item}</span>
+                    {index < 3 ? <span className="text-[var(--claim-verified)]">↓</span> : null}
                   </div>
                 ))}
               </div>
-              <p className="mb-0 mt-5 border-l-2 border-[var(--accent)] pl-4 text-[15px] leading-6 text-[var(--text-primary)]">
-                Every output steers the next turn. One conversation = many revolutions of this loop.
-              </p>
+              <h3 className="m-0 font-[var(--font-display)] text-[28px] font-semibold leading-8">It checks everything you say</h3>
+              <p className="mb-0 mt-4 text-[18px] leading-7 text-[var(--text-secondary)]">While you talk, Curio&apos;s team of checkers compares every statement to what the curriculum actually says — then asks the one question most likely to expose a gap.</p>
             </article>
 
-            <div className="grid min-[1280px]:grid-cols-2">
-              <article className="border-b border-[var(--border)] px-4 py-8 sm:px-6 lg:px-8 min-[1280px]:border-r">
-                <div className="mb-5 flex items-baseline gap-3">
-                  <span className="font-mono text-[12px] font-semibold text-[var(--accent)]">LOOP 02</span>
-                  <h3 className="m-0 font-[var(--font-display)] text-[22px] font-semibold leading-7">The compile loop</h3>
-                </div>
-                <LoopSequence items={compileLoop} />
-                <p className="mb-0 mt-5 text-[15px] leading-6 text-[var(--text-secondary)]">Human judgment, compiled once, executed by agents every session.</p>
-              </article>
-
-              <article className="border-b border-[var(--border)] px-4 py-8 sm:px-6 lg:px-8">
-                <div className="mb-5 flex items-baseline gap-3">
-                  <span className="font-mono text-[12px] font-semibold text-[var(--accent)]">LOOP 03</span>
-                  <h3 className="m-0 font-[var(--font-display)] text-[22px] font-semibold leading-7">The learner-model loop</h3>
-                </div>
-                <LoopSequence items={learnerLoop} />
-                <p className="mb-0 mt-5 text-[15px] leading-6 text-[var(--text-secondary)]">What Curio believes is rebuilt continuously — and it can only know what you taught.</p>
-              </article>
-            </div>
-
-            <aside aria-labelledby="context-boundaries-title" className="border-b border-[var(--border)] bg-[var(--bg-sunken)] px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
-              <p className="m-0 font-mono text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--accent)]">Runtime guards</p>
-              <h3 id="context-boundaries-title" className="mb-0 mt-2 font-[var(--font-display)] text-[28px] font-semibold leading-8 text-[var(--text-primary)]">Same models. Three different minds.</h3>
-              <div className="mt-6 grid border-2 border-[var(--border-strong)] min-[900px]:grid-cols-3">
-                <div className="border-l-[3px] border-l-[var(--accent)] p-5">
-                  <p className="m-0 font-mono text-[12px] font-semibold uppercase tracking-[0.06em] text-[var(--accent)]">The novice</p>
-                  <p className="mb-0 mt-3 text-[15px] leading-6 text-[var(--text-secondary)]">Knowledge-bounded: it cannot use what you have not taught.</p>
-                </div>
-                <div className="border-t border-[var(--border)] border-l-[3px] border-l-[var(--agent-verifier)] p-5 min-[900px]:border-t-0">
-                  <p className="m-0 font-mono text-[12px] font-semibold uppercase tracking-[0.06em] text-[var(--agent-verifier)]">The verifier</p>
-                  <p className="mb-0 mt-3 text-[15px] leading-6 text-[var(--text-secondary)]">Pack-grounded: it cannot assert beyond the approved contract.</p>
-                </div>
-                <div className="border-t border-[var(--border)] border-l-[3px] border-l-[var(--agent-curriculum)] p-5 min-[900px]:border-t-0">
-                  <p className="m-0 font-mono text-[12px] font-semibold uppercase tracking-[0.06em] text-[var(--agent-curriculum)]">The teach-back generator</p>
-                  <p className="mb-0 mt-3 text-[15px] leading-6 text-[var(--text-secondary)]">Code-isolated from the answer key: a runtime guard rejects reference-model content from its context.</p>
-                </div>
+            <article className="flex min-h-[460px] flex-col p-5 sm:p-7 lg:p-8">
+              <span className="font-mono text-[12px] font-semibold text-[var(--claim-observed)]">03</span>
+              <div aria-hidden="true" className="my-8 grid min-h-[150px] grid-cols-[1fr_36px_1fr] items-center border-y border-[var(--border)] bg-[var(--bg-panel)] px-4 py-5">
+                <div className="border-2 border-[var(--accent)] bg-[var(--paper)] p-3 text-center font-[var(--font-display)] text-[15px] font-semibold text-[var(--ink-paper)]">Your lesson</div>
+                <div className="text-center font-mono text-[22px] text-[var(--accent)]">⇄</div>
+                <div className="border-2 border-[var(--claim-observed)] bg-[var(--bg-evidence)] p-3 text-center font-[var(--font-display)] text-[15px] font-semibold text-[var(--text-primary)]">Curio&apos;s lesson</div>
               </div>
-            </aside>
+              <h3 className="m-0 font-[var(--font-display)] text-[28px] font-semibold leading-8">Then it teaches it back</h3>
+              <p className="mb-0 mt-4 text-[18px] leading-7 text-[var(--text-secondary)]">At the end, Curio explains the topic back using only what YOU taught it. Taught it wrong? It repeats your mistake to your face. The correct answer is locked away from this step — it can&apos;t cheat.</p>
+            </article>
+          </div>
+        </section>
 
-            <p className="m-0 px-4 py-4 font-mono text-[12px] leading-5 text-[var(--text-muted)] sm:px-6 lg:px-8">
-              5 specialized agents · 2 model tiers · 3 enforced context boundaries · every question carries its recorded reason.
-            </p>
-          </section>
+        <section aria-labelledby="three-minds-title" className="mt-20 lg:mt-24">
+          <div className="flex items-end justify-between gap-6 border-b-2 border-[var(--border-strong)] pb-5">
+            <h2 id="three-minds-title" className="m-0 font-[var(--font-display)] text-[clamp(30px,3.5vw,44px)] font-semibold leading-[1.08] tracking-[-0.02em]">Three minds, one rule each</h2>
+          </div>
+          <div className="grid bg-[var(--bg-sunken)] md:grid-cols-3">
+            {minds.map(([title, detail, color], index) => (
+              <article key={title} className={`min-h-[170px] border-l-[3px] p-6 ${index ? "border-t border-t-[var(--border)] md:border-t-0" : ""}`} style={{ borderLeftColor: color }}>
+                <h3 className="m-0 font-[var(--font-display)] text-[23px] font-semibold leading-7" style={{ color }}>{title}</h3>
+                <p className="mb-0 mt-4 text-[18px] leading-7 text-[var(--text-secondary)]">{detail}</p>
+              </article>
+            ))}
+          </div>
+        </section>
 
-          <footer className="pt-8 font-mono text-[12px] leading-5 text-[var(--text-muted)]">
-            One educator. Thousands of rehearsals. Agents deliver, a human reviews what matters.
-          </footer>
-        </div>
+        <section aria-labelledby="not-chatbot-title" className="mt-20 border-y-2 border-[var(--border-strong)] bg-[var(--bg-evidence)] lg:mt-24">
+          <header className="px-5 py-8 sm:px-7 lg:px-8">
+            <h2 id="not-chatbot-title" className="m-0 font-[var(--font-display)] text-[clamp(34px,4vw,52px)] font-semibold leading-[1.05] tracking-[-0.025em]">This is not a chatbot</h2>
+          </header>
+          <div className="grid border-t border-[var(--border)] md:grid-cols-3">
+            {comparisons.map(([title, detail], index) => (
+              <article key={title} className={`min-h-[220px] p-6 sm:p-7 ${index ? "border-t border-[var(--border)] md:border-l md:border-t-0" : ""} ${index === 2 ? "border-2 !border-[var(--accent)] bg-[var(--bg-raised)] md:-m-[2px]" : ""}`}>
+                <p className={`m-0 font-mono text-[12px] font-semibold uppercase tracking-[0.08em] ${index === 2 ? "text-[var(--accent)]" : "text-[var(--text-muted)]"}`}>{title}</p>
+                <p className={`mb-0 mt-5 font-[var(--font-display)] text-[22px] font-semibold leading-8 ${index === 2 ? "text-[var(--text-primary)]" : "text-[var(--text-secondary)]"}`}>{detail}</p>
+              </article>
+            ))}
+          </div>
+          <p className="m-0 border-t-2 border-[var(--border-strong)] px-5 py-7 text-center font-[var(--font-display)] text-[clamp(22px,3vw,32px)] font-semibold leading-tight text-[var(--accent)] sm:px-7">Reading feels like knowing. Explaining proves it.</p>
+        </section>
+
+        <footer className="pt-8 font-mono text-[12px] leading-5 text-[var(--text-muted)]">
+          One educator. Thousands of rehearsals. Agents deliver, a human reviews what matters.
+        </footer>
       </section>
     </main>
   );
