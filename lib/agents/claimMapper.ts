@@ -64,10 +64,6 @@ function mapperSystem(pack: ConceptPack): string {
   ].join("\n");
 }
 
-function normalizeIds(ids: string[]): string {
-  return [...new Set(ids)].sort().join("\u0000");
-}
-
 function mapNodes(text: string, pack: ConceptPack): string[] {
   const normalize = (value: string) => value.toLocaleLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   const lower = normalize(text);
@@ -121,11 +117,18 @@ function upsertExtractedClaims(sessionId: string, extracted: ExtractedClaim[], s
     const state = getSessionState(sessionId);
     if (!state) throw new Error(`Unknown session: ${sessionId}`);
     const createdAtMs = Math.max(...item.segmentIds.map((id) => segmentById.get(id)?.tMs ?? Date.now()));
-    const nodeKey = normalizeIds(item.nodeIds);
-    const earlier = nodeKey
+    const explicitRepair = /\b(actually|i was wrong|correction|correct that)\b/i.test(`${item.statement} ${item.originalText}`);
+    const repairTarget = explicitRepair
       ? [...state.claims].reverse().find((claim) =>
-          claim.status !== "superseded" &&
-          normalizeIds(claim.nodeIds) === nodeKey &&
+          claim.status === "contradicted" && claim.createdAtMs < createdAtMs)
+      : undefined;
+    const nodeIds = [...new Set([...item.nodeIds, ...(repairTarget?.nodeIds ?? [])])];
+    const itemNodeIds = new Set(nodeIds);
+    const earlier = itemNodeIds.size > 0
+      ? [...state.claims].reverse().find((claim) =>
+          claim.status === "contradicted" &&
+          claim.createdAtMs < createdAtMs &&
+          claim.nodeIds.some((nodeId) => itemNodeIds.has(nodeId)) &&
           claim.statement.toLocaleLowerCase() !== item.statement.toLocaleLowerCase())
       : undefined;
 
@@ -137,7 +140,7 @@ function upsertExtractedClaims(sessionId: string, extracted: ExtractedClaim[], s
       statement: item.statement,
       originalText: item.originalText,
       segmentIds: item.segmentIds,
-      nodeIds: item.nodeIds,
+      nodeIds,
       status: "observed",
       ...(earlier ? { supersedesClaimId: earlier.id } : {}),
       createdAtMs,
@@ -204,13 +207,20 @@ export async function runPipelineTick(sessionId: string): Promise<void> {
   }
 
   control.isProcessing = true;
+  let recoveryReentries = 0;
   try {
-    do {
+    while (true) {
       control.dirty = false;
-      await processBatch(sessionId);
-    } while (control.dirty);
-  } catch (error) {
-    console.error(`Curio pipeline tick failed for session ${sessionId}`, error);
+      try {
+        await processBatch(sessionId);
+      } catch (error) {
+        console.error(`Curio pipeline tick failed for session ${sessionId}`, error);
+        if (!control.dirty || recoveryReentries >= 2) break;
+        recoveryReentries += 1;
+        continue;
+      }
+      if (!control.dirty) break;
+    }
   } finally {
     control.isProcessing = false;
     if (!control.dirty) controls.delete(sessionId);
