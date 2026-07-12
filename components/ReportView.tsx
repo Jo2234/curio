@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { Component, useEffect, useState, type ErrorInfo, type ReactNode } from "react";
 
 import ConceptMap from "@/components/ConceptMap";
 import LearnerVsReference from "@/components/LearnerVsReference";
@@ -15,6 +18,50 @@ export interface ReportViewProps {
   session: Session;
   pack: ConceptPack;
   report: SessionReport;
+}
+
+function ReportStatusCard({ failed = false }: { failed?: boolean }) {
+  return (
+    <main className="grid min-h-screen place-items-center bg-[var(--bg-canvas)] px-4 py-8 text-[var(--text-primary)]">
+      <section
+        role={failed ? "alert" : "status"}
+        className="w-full max-w-xl border-2 border-[var(--border-strong)] bg-[var(--bg-panel)] p-6 shadow-[4px_4px_0_var(--shadow-hard)]"
+      >
+        <p className="m-0 font-mono text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--accent)]">
+          Curio session evidence
+        </p>
+        <h1 className="mb-0 mt-2 font-[var(--font-display)] text-[30px] font-semibold leading-9">
+          Report is assembling
+        </h1>
+        <p className="mb-0 mt-3 max-w-none text-[16px] leading-6 text-[var(--text-secondary)]">
+          {failed
+            ? "This report did not finish drawing. Refresh to load the saved evidence again."
+            : "Preparing the saved evidence…"}
+        </p>
+        {failed ? (
+          <button type="button" className="mt-5 border-2 border-[var(--accent)] bg-[var(--accent)] px-4 py-2 font-semibold text-[var(--ink-on-accent)]" onClick={() => window.location.reload()}>
+            Refresh report
+          </button>
+        ) : null}
+      </section>
+    </main>
+  );
+}
+
+class ReportErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("Curio report render failed", error, info);
+  }
+
+  render() {
+    return this.state.failed ? <ReportStatusCard failed /> : this.props.children;
+  }
 }
 
 const phaseOrder: Array<{ key: string; label: string }> = [
@@ -86,7 +133,7 @@ function EvidenceQuote({ text, speaker, tMs, startedAt, segmentId, claimId }: {
   );
 }
 
-export default function ReportView({ session, pack, report }: ReportViewProps) {
+function ReportBody({ session, pack, report }: ReportViewProps) {
   const segmentById = new Map(report.segments.map((segment) => [segment.id, segment]));
   const claimById = new Map(report.claims.map((claim) => [claim.id, claim]));
   const findings = report.findings as ReviewedFinding[];
@@ -127,6 +174,7 @@ export default function ReportView({ session, pack, report }: ReportViewProps) {
         </header>
 
         <LearnerVsReference
+          startedAt={session.createdAt}
           teachbackScript={report.teachbackResult?.script}
           beliefs={report.beliefs}
           claims={report.claims}
@@ -255,5 +303,22 @@ export default function ReportView({ session, pack, report }: ReportViewProps) {
         </section>
       </div>
     </main>
+  );
+}
+
+export default function ReportView(props: ReportViewProps) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
+
+  // The report can be composed while a live route transition is in flight.
+  // Keep the server and first client render identical, then draw one coherent
+  // client snapshot instead of hydrating time-sensitive evidence markup.
+  if (!mounted) return <ReportStatusCard />;
+
+  return (
+    <ReportErrorBoundary>
+      <ReportBody {...props} />
+    </ReportErrorBoundary>
   );
 }

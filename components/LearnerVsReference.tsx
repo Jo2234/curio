@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { AtomicClaim, ConceptPack, LearnerBelief, TranscriptSegment } from "@/lib/types";
 
 interface LearnerVsReferenceProps {
+  startedAt: number;
   teachbackScript?: string;
   beliefs: LearnerBelief[];
   claims: AtomicClaim[];
@@ -35,6 +36,7 @@ function EvidenceBracket({ segment, claimId, startedAt }: {
 }
 
 export default function LearnerVsReference({
+  startedAt,
   teachbackScript,
   beliefs,
   claims,
@@ -45,7 +47,6 @@ export default function LearnerVsReference({
   const [tab, setTab] = useState<"learner" | "reference">("learner");
   const claimById = new Map(claims.map((claim) => [claim.id, claim]));
   const segmentById = new Map(segments.map((segment) => [segment.id, segment]));
-  const startedAt = Math.min(...segments.map((segment) => segment.tMs), Date.now());
 
   return (
     <section aria-labelledby="learner-reference-heading" className="border-2 border-[var(--border-strong)] bg-[var(--bg-panel)]">
