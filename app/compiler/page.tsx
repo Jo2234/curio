@@ -35,7 +35,7 @@ export default function CompilerPage() {
   const [isCompiling, setIsCompiling] = useState(false);
   const [progressStage, setProgressStage] = useState(0);
   const [error, setError] = useState("");
-  const [approval, setApproval] = useState<{ approvedBy: string; approvedAt: string } | null>(null);
+  const [approval, setApproval] = useState<{ packId: string; approvedBy: string; approvedAt: string } | null>(null);
   const [isApproving, setIsApproving] = useState(false);
 
   useEffect(() => {
@@ -101,17 +101,18 @@ export default function CompilerPage() {
       const response = await fetch("/api/compiler", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ draft, approvedBy: "Instructor" }),
+        body: JSON.stringify({ draft, approvedBy: "Instructor", sourceText: result?.sourceText, sourceRole: result?.sourceRole }),
       });
       const data = (await response.json()) as {
+        packId?: string;
         approvedBy?: string;
         approvedAt?: string;
         error?: string;
       };
-      if (!response.ok || !data.approvedBy || !data.approvedAt) {
+      if (!response.ok || !data.packId || !data.approvedBy || !data.approvedAt) {
         throw new Error(data.error || "Approval could not be saved.");
       }
-      setApproval({ approvedBy: data.approvedBy, approvedAt: data.approvedAt });
+      setApproval({ packId: data.packId, approvedBy: data.approvedBy, approvedAt: data.approvedAt });
     } catch (approvalError) {
       setError(approvalError instanceof Error ? approvalError.message : "Approval could not be saved.");
     } finally {
@@ -192,6 +193,10 @@ export default function CompilerPage() {
           ) : (
             <>
               <ProgressDocket active progressStage={progressLabels.length} complete />
+              <article className="draft-card">
+                <h3>{result.draft.title}</h3>
+                <p>{result.draft.subject} · {result.draft.level} · v{result.draft.version}</p>
+              </article>
               <SectionRule label={`${result.draft.objectives.length} learning objectives`} />
               <div className="card-stack">
                 {result.draft.objectives.map((objective) => (
@@ -222,6 +227,15 @@ export default function CompilerPage() {
                       <span>{node.importance}</span>
                     </div>
                   </article>
+                ))}
+              </div>
+              <SectionRule label={`${result.draft.edges.length} causal links`} />
+              <div className="card-stack">
+                {result.draft.edges.map((edge) => (
+                  <details className="draft-card" key={edge.id}>
+                    <summary>{result.draft.nodes.find((node) => node.id === edge.from)?.name} → {result.draft.nodes.find((node) => node.id === edge.to)?.name}</summary>
+                    <p>{edge.explanation}</p>
+                  </details>
                 ))}
               </div>
             </>
@@ -396,7 +410,7 @@ function ReviewMargin({
   onApprove,
 }: {
   result: CompilerResult;
-  approval: { approvedBy: string; approvedAt: string } | null;
+  approval: { packId: string; approvedBy: string; approvedAt: string } | null;
   isApproving: boolean;
   onApprove: (draft: CompiledPackDraft) => void;
 }) {
@@ -417,6 +431,21 @@ function ReviewMargin({
             <p><span>Counter-question:</span> {misconception.counterQuestion}</p>
           </article>
         ))}
+      </section>
+
+      <section className="review-section">
+        <h3>Transfer checks</h3>
+        {result.draft.transferProbes.map((probe) => (
+          <details className="probe-card" key={probe.id}>
+            <summary>{probe.question}</summary>
+            <p><span>Expected reasoning:</span> {probe.expectedReasoning}</p>
+          </details>
+        ))}
+      </section>
+
+      <section className="review-section">
+        <h3>Reference explanation</h3>
+        <p>{result.draft.referenceSummary}</p>
       </section>
 
       <section className="review-section">
@@ -445,7 +474,7 @@ function ReviewMargin({
             {isApproving ? "Recording approval…" : "Approve as instructor"}
           </button>
         ) : (
-          <Link className="session-link" href="/setup">Use in a session →</Link>
+          <Link className="session-link" href={`/setup?packId=${encodeURIComponent(approval.packId)}`}>Use in a session →</Link>
         )}
       </section>
     </>

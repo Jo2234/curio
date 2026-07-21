@@ -277,31 +277,22 @@ export function SessionRoom({ sessionId, pack }: { sessionId: string; pack: Pack
         ) : null}
         {advanceError ? <p role="alert" className="m-0 border-l-[3px] border-[var(--claim-contradicted)] bg-[var(--bg-evidence)] px-5 py-2 text-[14px] text-[var(--claim-contradicted)]">{advanceError}</p> : null}
         {showHarness ? <ConceptMap nodes={pack.nodes} conceptStates={stream.conceptStates} /> : <ConceptMapCompact nodes={pack.nodes} conceptStates={stream.conceptStates} />}
-        {showHarness ? (
-          <div className="grid min-h-0 gap-3 xl:grid-cols-12">
-            <div className="flex min-h-[590px] min-w-0 flex-col gap-3 xl:col-span-6">
-              <NovicePresence speaking={noviceSpeaking} />
-              <div className="voice-mount curio-panel px-4 py-2"><VoiceClient sessionId={sessionId} onNoviceSpeakingChange={setNoviceSpeaking} /></div>
-              <TranscriptPanel segments={stream.segments} />
-              <SessionControls sessionId={sessionId} phase={stream.phase} onAdvance={advance} />
-            </div>
-            <>
-              <div className="min-h-[590px] min-w-0 xl:col-span-3"><AgentPanel agentEvents={stream.agentEvents} directives={stream.directives} /></div>
-              <div className="min-h-[590px] min-w-0 xl:col-span-3"><ClaimLedger claims={stream.claims} findings={findings} misconceptionTitles={misconceptionTitles} /></div>
-            </>
-          </div>
-        ) : (
-          <div className="flex min-h-0 flex-col gap-3">
-            <section className="calm-presence curio-panel flex min-w-0 flex-col xl:min-h-[168px] xl:flex-row" aria-label="Novice and voice controls">
+        <div className={showHarness ? "grid min-h-0 gap-3 xl:grid-cols-12" : "flex min-h-0 flex-col gap-3"}>
+          <div className={showHarness ? "flex min-h-[590px] min-w-0 flex-col gap-3 xl:col-span-6" : "flex min-w-0 flex-col gap-3"}>
+            <section className={showHarness ? "flex min-w-0 flex-col gap-3" : "calm-presence curio-panel flex min-w-0 flex-col xl:min-h-[168px] xl:flex-row"} aria-label="Novice and voice controls">
               <NovicePresence speaking={noviceSpeaking} />
               <div className="voice-mount flex-1 px-4 py-3"><VoiceClient sessionId={sessionId} onNoviceSpeakingChange={setNoviceSpeaking} /></div>
             </section>
-            <section className="calm-transcript curio-panel flex min-h-[430px] min-w-0 flex-col" aria-label="Lesson transcript and controls">
+            <section className={showHarness ? "flex min-h-0 flex-1 flex-col gap-3" : "calm-transcript curio-panel flex min-h-[430px] min-w-0 flex-col"} aria-label="Lesson transcript and controls">
               <TranscriptPanel segments={stream.segments} />
               <SessionControls sessionId={sessionId} phase={stream.phase} onAdvance={advance} />
             </section>
           </div>
-        )}
+          {showHarness ? <>
+            <div className="min-h-[590px] min-w-0 xl:col-span-3"><AgentPanel agentEvents={stream.agentEvents} directives={stream.directives} /></div>
+            <div className="min-h-[590px] min-w-0 xl:col-span-3"><ClaimLedger claims={stream.claims} findings={findings} misconceptionTitles={misconceptionTitles} /></div>
+          </> : null}
+        </div>
       </div>
     </main>
   );

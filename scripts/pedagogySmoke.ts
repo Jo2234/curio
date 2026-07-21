@@ -11,7 +11,6 @@ import {
   createSession,
   getSessionState,
   setClaimMapperCursor,
-  setPhase,
   upsertClaim,
 } from "../lib/store";
 
@@ -25,7 +24,6 @@ async function main(): Promise<void> {
   assert(liveKey, `pedagogy smoke requires the live ${provider} key from .env.local`);
 
   const { session } = createSession("earth-seasons", "teacher");
-  setPhase(session.id, "listening");
   const now = Date.now();
   const plantedSegments = [
     "Let me start with the yearly pattern of summer and winter.",
@@ -66,7 +64,7 @@ async function main(): Promise<void> {
   pass("mc-distance surfaces the verbatim counter-question with its recorded reason");
 
   const contradiction = state.claims.find((claim) => claim.misconceptionId === "mc-distance");
-  assert(contradiction, "the deterministic verifier should create the planted contradicted claim");
+  assert(contradiction, "the semantic verifier should identify the planted contradicted claim");
   addBelief(session.id, {
     id: nanoid(),
     sessionId: session.id,

@@ -24,8 +24,8 @@ interface ClaimMapperOutput {
 }
 
 interface PipelineControl {
-  isProcessing: boolean;
   dirty: boolean;
+  promise: Promise<void>;
 }
 
 const controls = new Map<string, PipelineControl>();
@@ -72,58 +72,6 @@ function mapNodes(text: string, pack: ConceptPack): string[] {
     .map((node) => node.id);
 }
 
-const REPAIR_CUE = /\b(actually|i was wrong|i am wrong|correction|correct that|not (?:because|due to)|rather than|instead)\b/i;
-
-function relatedNodeIds(nodeIds: string[], pack: ConceptPack): Set<string> {
-  const seeds = new Set(nodeIds);
-  const related = new Set(seeds);
-  for (const edge of pack.edges) {
-    if (seeds.has(edge.from) || seeds.has(edge.to)) {
-      related.add(edge.from);
-      related.add(edge.to);
-    }
-  }
-  return related;
-}
-
-function repairTargetFor(
-  item: ExtractedClaim,
-  sourceText: string,
-  createdAtMs: number,
-  pack: ConceptPack,
-  state: NonNullable<ReturnType<typeof getSessionState>>,
-): AtomicClaim | undefined {
-  const repairText = `${sourceText}\n${item.statement}\n${item.originalText}`;
-  if (!REPAIR_CUE.test(repairText)) return undefined;
-
-  const candidates = state.claims.filter((claim) =>
-    claim.status === "contradicted" && claim.createdAtMs < createdAtMs);
-  if (candidates.length === 0) return undefined;
-
-  const repairNodes = relatedNodeIds([...new Set([...item.nodeIds, ...mapNodes(repairText, pack)])], pack);
-  const scored = candidates.map((claim) => {
-    const findingNodes = state.findings
-      .filter((finding) => finding.claimIds.includes(claim.id))
-      .flatMap((finding) => finding.nodeIds);
-    const misconception = pack.misconceptions.find((candidate) => candidate.id === claim.misconceptionId);
-    const misconceptionText = misconception
-      ? [misconception.statement, misconception.explanation, misconception.counterQuestion, ...misconception.detectionHints].join(" ")
-      : "";
-    const targetNodes = new Set([
-      ...claim.nodeIds,
-      ...findingNodes,
-      ...mapNodes(misconceptionText, pack),
-    ]);
-    const nodeOverlap = [...repairNodes].filter((nodeId) => targetNodes.has(nodeId)).length;
-    const hintOverlap = misconception?.detectionHints.some((hint) =>
-      sourceText.toLocaleLowerCase().includes(hint.toLocaleLowerCase())) ? 1 : 0;
-    return { claim, score: nodeOverlap * 2 + hintOverlap };
-  });
-
-  return scored.sort((left, right) =>
-    right.score - left.score || right.claim.createdAtMs - left.claim.createdAtMs)[0]?.claim;
-}
-
 function fallbackClaims(segments: TranscriptSegment[], pack: ConceptPack): ExtractedClaim[] {
   return segments.flatMap((segment) => segment.text
     .split(/(?<=[.!])\s+/)
@@ -166,7 +114,6 @@ function upsertExtractedClaims(
   sessionId: string,
   extracted: ExtractedClaim[],
   segments: TranscriptSegment[],
-  pack: ConceptPack,
 ): void {
   const segmentById = new Map(segments.map((segment) => [segment.id, segment]));
 
@@ -174,29 +121,14 @@ function upsertExtractedClaims(
     const state = getSessionState(sessionId);
     if (!state) throw new Error(`Unknown session: ${sessionId}`);
     const createdAtMs = Math.max(...item.segmentIds.map((id) => segmentById.get(id)?.tMs ?? Date.now()));
-    const sourceText = item.segmentIds.map((id) => segmentById.get(id)?.text ?? "").join("\n");
-    const repairTarget = repairTargetFor(item, sourceText, createdAtMs, pack, state);
-    const nodeIds = [...new Set([...item.nodeIds, ...(repairTarget?.nodeIds ?? [])])];
-    const itemNodeIds = new Set(nodeIds);
-    const earlier = repairTarget ?? (itemNodeIds.size > 0
-      ? [...state.claims].reverse().find((claim) =>
-          claim.status === "contradicted" &&
-          claim.createdAtMs < createdAtMs &&
-          claim.nodeIds.some((nodeId) => itemNodeIds.has(nodeId)) &&
-          claim.statement.toLocaleLowerCase() !== item.statement.toLocaleLowerCase())
-      : undefined);
-
-    if (earlier) upsertClaim(sessionId, { ...earlier, status: "superseded" });
-
     const claim: AtomicClaim = {
       id: nanoid(),
       sessionId,
       statement: item.statement,
       originalText: item.originalText,
       segmentIds: item.segmentIds,
-      nodeIds,
+      nodeIds: item.nodeIds,
       status: "observed",
-      ...(earlier ? { supersedesClaimId: earlier.id } : {}),
       createdAtMs,
     };
     upsertClaim(sessionId, claim);
@@ -210,6 +142,8 @@ async function processBatch(sessionId: string): Promise<void> {
   const segments = state.segments.slice(state.claimMapperCursor, endCursor).filter((segment) => segment.speaker === "user");
   if (segments.length === 0) {
     setClaimMapperCursor(sessionId, endCursor);
+    await verifyNewClaims(sessionId);
+    await audit(sessionId);
     return;
   }
 
@@ -228,7 +162,7 @@ async function processBatch(sessionId: string): Promise<void> {
     extracted = fallbackClaims(segments, pack);
   }
 
-  upsertExtractedClaims(sessionId, extracted, segments, pack);
+  upsertExtractedClaims(sessionId, extracted, segments);
   setClaimMapperCursor(sessionId, endCursor);
   emitAgentEvent(sessionId, {
     id: nanoid(),
@@ -241,42 +175,30 @@ async function processBatch(sessionId: string): Promise<void> {
 
   await verifyNewClaims(sessionId);
   await audit(sessionId);
-  await (await import("./learnerModel")).updateBeliefs(sessionId);
-  try {
-    const pedagogy = await import("./pedagogy");
-    const decide = (pedagogy as { decide?: (id: string) => unknown }).decide;
-    if (typeof decide === "function") await decide(sessionId);
-  } catch (error) {
-    console.error("Optional pedagogy agent unavailable", error);
-  }
 }
 
-/** Fire-and-forget safe pipeline entry point. Concurrent ticks coalesce per session. */
-export async function runPipelineTick(sessionId: string): Promise<void> {
-  const control = controls.get(sessionId) ?? { isProcessing: false, dirty: false };
-  controls.set(sessionId, control);
-  if (control.isProcessing) {
-    control.dirty = true;
-    return;
+/** Drain claim extraction and verification; concurrent callers await the same work. */
+export function flushPipeline(sessionId: string): Promise<void> {
+  const existing = controls.get(sessionId);
+  if (existing) {
+    existing.dirty = true;
+    return existing.promise;
   }
-
-  control.isProcessing = true;
-  let recoveryReentries = 0;
-  try {
-    while (true) {
+  const control: PipelineControl = { dirty: false, promise: Promise.resolve() };
+  control.promise = Promise.resolve().then(async () => {
+    do {
       control.dirty = false;
-      try {
-        await processBatch(sessionId);
-      } catch (error) {
-        console.error(`Curio pipeline tick failed for session ${sessionId}`, error);
-        if (!control.dirty || recoveryReentries >= 2) break;
-        recoveryReentries += 1;
-        continue;
-      }
-      if (!control.dirty) break;
-    }
-  } finally {
-    control.isProcessing = false;
-    if (!control.dirty) controls.delete(sessionId);
-  }
+      await processBatch(sessionId);
+    } while (control.dirty);
+  }).finally(() => {
+    controls.delete(sessionId);
+  });
+  controls.set(sessionId, control);
+  return control.promise;
+}
+
+/** Questions depend on verified evidence, never on the optional learner reconstruction. */
+export async function runPipelineTick(sessionId: string): Promise<void> {
+  await flushPipeline(sessionId);
+  await (await import("./pedagogy")).decide(sessionId);
 }
