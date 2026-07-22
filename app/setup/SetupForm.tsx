@@ -16,17 +16,17 @@ interface PackOption {
 
 const comingSoon = ["Cellular Respiration", "Digestive System"];
 
-export default function SetupForm({ packs, initialMode }: { packs: PackOption[]; initialMode: Mode }) {
+export default function SetupForm({ packs, initialMode, initialPackId }: { packs: PackOption[]; initialMode: Mode; initialPackId?: string }) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>(initialMode);
-  const [packId, setPackId] = useState(packs[0]?.id ?? "");
+  const [packId, setPackId] = useState(packs.find((pack) => pack.id === initialPackId)?.id ?? packs[0]?.id ?? "");
   const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState("");
   const selectedPack = packs.find((pack) => pack.id === packId);
 
   function chooseMode(nextMode: Mode) {
     setMode(nextMode);
-    router.replace(`/setup?mode=${nextMode}`, { scroll: false });
+    router.replace(`/setup?mode=${nextMode}&packId=${encodeURIComponent(packId)}`, { scroll: false });
   }
 
   async function startSession() {

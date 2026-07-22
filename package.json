@@ -9,7 +9,9 @@
     "lint": "eslint",
     "electron:compile": "tsc -p electron/tsconfig.json",
     "app": "npm run electron:compile && electron electron/dist/main.js",
-    "app:package": "npm run electron:compile && electron-builder --mac dir"
+    "app:package": "npm run electron:compile && electron-builder --mac dir",
+    "test": "node --experimental-vm-modules --test tests/*.mjs",
+    "typecheck": "tsc --noEmit --incremental false"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.67.0",
@@ -28,6 +30,7 @@
     "electron-builder": "^26.15.3",
     "eslint": "^9",
     "eslint-config-next": "15.5.9",
+    "react-test-renderer": "19.1.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.0",
     "typescript": "^5"

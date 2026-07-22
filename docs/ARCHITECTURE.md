@@ -165,9 +165,9 @@ Realtime transcription (client) ── POST /transcript ──► store.addSegme
   Directive ── SSE ──► client ── data channel ──► novice speaks
 ```
 
-- Pipeline runs server-side, fire-and-forget from the transcript POST handler (do not block the response). Guard with a per-session `isProcessing` flag; if busy, mark dirty and re-run once.
-- **Deterministic guarantee:** verifier first does a cheap string/regex pass with each misconception's `detectionHints` before the LLM call; a hit immediately creates the contradicted claim + finding and pedagogy uses the pack's `counterQuestion` verbatim. The LLM pass adds the rest. This makes the demo's planted-error catch reliable even if the model is slow.
-- Phase machine (server, in pedagogy): `listening` (min 60s / min 4 user segments, no substantive questions) → `questioning` → `repair` (when a misconception finding exists) → `transfer` (after repair confirmed or question budget ≥3 used) → `teachback` (user presses Finish or budget exhausted) → `report`.
+- User transcript POSTs trigger the server pipeline without blocking the response. Concurrent ticks share a completion promise and coalesce new work. Teach-back explicitly awaits claim extraction and verification. Learner beliefs are reconstructed on demand once per evidence revision, outside the live question path.
+- **Semantic verification:** misconception hints are context for the verifier, never proof. The verifier distinguishes affirmative assertions from negation, quotation and refutation, and identifies explicit repairs. Only a semantically contradicted claim can select a pack misconception counter-question. Failed verification remains pending and can be retried before teach-back.
+- Session creation begins in `listening`; phase machine (server, in pedagogy): `listening` (min 60s / min 4 user segments, no substantive questions) → `questioning` → `repair` (when a misconception finding exists) → `transfer` (after repair confirmed or question budget ≥3 used) → `teachback` (user presses Finish or budget exhausted) → `report`.
 
 ## 6. Teach-back isolation (non-negotiable)
 

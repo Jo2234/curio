@@ -2,7 +2,7 @@ import { nanoid } from "nanoid";
 
 import { runPipelineTick } from "../lib/agents/claimMapper";
 import { listPacks } from "../lib/packs";
-import { addSegment, createSession, getSessionState, setPhase } from "../lib/store";
+import { addSegment, createSession, getSessionState } from "../lib/store";
 
 const cannedSegments = [
   "Earth's tilt changes the angle at which sunlight reaches each hemisphere.",
@@ -27,7 +27,6 @@ async function main(): Promise<void> {
   }
 
   const { session } = createSession(pack.id, "teacher");
-  setPhase(session.id, "listening");
   const start = Date.now();
   cannedSegments.forEach((text, index) => {
     addSegment(session.id, {
@@ -46,7 +45,7 @@ async function main(): Promise<void> {
   const results = [
     assertion("at least four atomic claims exist", state.claims.length >= 4),
     assertion(
-      "distance misconception is deterministically contradicted",
+      "distance misconception is semantically contradicted",
       state.claims.some((claim) => claim.status === "contradicted" && claim.misconceptionId === "mc-distance"),
     ),
     assertion(
