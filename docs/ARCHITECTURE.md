@@ -1,191 +1,75 @@
-# Architecture Lock — frozen decisions and contracts
+# Curio architecture
 
-This file is copied into the repo as `docs/ARCHITECTURE.md` by T00. Every codex brief says "read this first." Nothing here is up for debate during the build.
+Curio turns a spoken explanation into an inspectable evidence trail, then asks an AI novice to reconstruct what it learned. This document describes the implementation; [the README](../README.md) covers setup, and [lib/types.ts](../lib/types.ts) defines the current contracts.
 
-## 1. Stack (locked)
+## Runtime and storage
 
-- **One app:** Next.js 15, App Router, TypeScript, Tailwind. `npx create-next-app@latest feynman --ts --tailwind --app --no-src-dir`. Node 22, npm.
-- **No database.** In-memory session store in a module singleton (`lib/store.ts`) + JSON snapshot written to `data/sessions/<id>.json` on every mutation (crash recovery + debugging). Single `next dev` process. This is fine for a demo; do not add Postgres/Redis/queues.
-- **Voice:** OpenAI Realtime API over WebRTC. Model env `REALTIME_MODEL` (default `gpt-realtime`). Ephemeral token minted server-side at `/api/realtime/token`. Server VAD on, plus a push-to-talk toggle that switches turn detection off and commits audio manually (noisy venue).
-- **Reasoning agents (claim mapper, verifier, coverage, pedagogy, learner model, teach-back, visual, compiler, report):** Anthropic Messages API, model env `REASONING_MODEL` (default `claude-sonnet-5`). All calls go through one helper `lib/llm.ts` that forces JSON via a single `tool` with an input schema and `tool_choice: {type:"tool"}`. Escape hatch: `REASONING_PROVIDER=openai` swaps to OpenAI structured outputs — implement the switch in `llm.ts` only.
-- **Server→client updates:** one SSE stream per session (`/api/sessions/[id]/events`). No websockets, no polling loops.
-- **Client→novice steering:** the server never talks to the Realtime session directly. Directives arrive on the client via SSE; the client injects them into the WebRTC data channel as `response.create` with `instructions`. Persona is set once at session start via `session.update`.
+- Next.js 15 App Router, React 19, TypeScript and Tailwind host the UI and server APIs. Use Node.js 22. The optional [Electron shell](../electron/main.ts) starts a local Next.js server and opens the same application.
+- [lib/store.ts](../lib/store.ts) keeps sessions in a process-local map. Mutations synchronously write JSON snapshots under `data/sessions/`, then notify subscribers. These files support inspection; the store does **not** reload sessions after restart. There is no database, shared worker or multi-process persistence layer.
+- [lib/packs.ts](../lib/packs.ts) loads validated bundled packs from `packs/` and approved packs from `data/packs/`. Approval writes through a temporary file and rename, using a new pack ID so bundled content is preserved.
+- [lib/llm.ts](../lib/llm.ts) centralizes structured reasoning and vision calls. `REASONING_PROVIDER=openai` selects OpenAI structured outputs; otherwise it uses Anthropic tool output. Set `REASONING_MODEL` and `REASONING_MODEL_DEEP` explicitly for the selected provider. The helper's fallback model names are Anthropic names, even when the provider is OpenAI; follow the README's explicit configuration.
+- OpenAI Realtime supplies voice over WebRTC. `/api/realtime/token` mints the client credential server-side. `REALTIME_MODEL` selects the voice model independently of reasoning models.
 
-## 2. Repo layout and file ownership
+## Evidence flow
 
-```
-feynman/
-  docs/ARCHITECTURE.md          (T00, frozen)
-  packs/earth-seasons.json      (T00 copies from build pack)
-  packs/seasons-syllabus-excerpt.md
-  data/sessions/                (gitignored, runtime)
-  lib/
-    types.ts                    (T00, FROZEN after Wave 0 — changes need orchestrator sign-off)
-    store.ts                    (T00 skeleton; T02 may extend mutators)
-    packs.ts                    (T00)
-    llm.ts                      (T02)
-    agents/claimMapper.ts       (T02)
-    agents/verifier.ts          (T02)
-    agents/coverage.ts          (T02)
-    agents/pedagogy.ts          (T04)
-    agents/learnerModel.ts      (T05)
-    agents/teachback.ts         (T05)
-    agents/visual.ts            (T06)
-    agents/reportComposer.ts    (T07)
-    agents/compiler.ts          (T08)
-  app/
-    page.tsx                    (T09; T00 stub)
-    setup/page.tsx              (T09; T00 stub)
-    session/[id]/page.tsx       (T03)
-    report/[id]/page.tsx        (T07)
-    review/page.tsx             (T07)
-    compiler/page.tsx           (T08)
-    api/sessions/route.ts               (T00)   POST create session
-    api/sessions/[id]/events/route.ts   (T00)   GET SSE stream
-    api/sessions/[id]/transcript/route.ts (T01) POST final segments
-    api/sessions/[id]/board/route.ts    (T06)   POST board image
-    api/sessions/[id]/advance/route.ts  (T04)   POST phase transitions
-    api/realtime/token/route.ts         (T01)
-    api/compiler/route.ts               (T08)
-  components/
-    TranscriptPanel.tsx, AgentPanel.tsx, ClaimLedger.tsx,
-    ConceptMap.tsx, SessionControls.tsx        (T03)
-    VoiceClient.tsx (WebRTC + data channel)    (T01)
-    BoardCapture.tsx                           (T06)
-    ReportView.tsx, LearnerVsReference.tsx     (T07)
+```text
+VoiceClient → final transcript → session store → SSE → live room
+                                  │
+                                  └→ claim mapper → verifier → coverage → pedagogy
+                                                                            │
+                                      novice ← WebRTC client ← SSE directive
+
+Finish → flush verification → learner beliefs → isolated teach-back
+Correction → refreshed evidence/beliefs → report → expert review
 ```
 
-## 3. `lib/types.ts` — the frozen contract
+1. [VoiceClient](../components/VoiceClient.tsx) posts final user and novice segments to `/api/sessions/[id]/transcript`. User segments trigger the claim pipeline without waiting for it in the HTTP response.
+2. [Claim mapping](../lib/agents/claimMapper.ts) extracts atomic statements with source segment IDs and original wording. Its fallback extracts candidate sentences; this does not establish their truth. Concurrent ticks join an in-flight promise and coalesce new work.
+3. [Verification](../lib/agents/verifier.ts) compares claims with the selected pack, retaining reference citations and evidence for findings. Misconception hints are context, not proof: negation, quotation and refutation must be distinguished from affirmative errors. Failed verification stays retryable. Explicit repairs can supersede earlier claims.
+4. [Coverage](../lib/agents/coverage.ts) updates concept states and assumption debt. [Pedagogy](../lib/agents/pedagogy.ts) chooses one diagnostic question or hint and records the reason in a `Directive` and `AgentEvent`. Listening time, question budgets, repair evidence and transfer probes constrain the phase transitions.
+5. `/api/sessions/[id]/events` sends an initial snapshot and subsequent store events over SSE, with heartbeat comments and disconnect cleanup. The client injects directives into the Realtime data channel; the server does not directly control that voice connection. The novice persona permits substantive questions only under a directive. Voice controls include manual push-to-talk.
 
-T00 writes this file exactly as below (plus imports/exports as needed). Later tasks import from it and never redefine shapes.
+Board captures take a separate vision path through [visual.ts](../lib/agents/visual.ts), retaining labels, relationships and ambiguities for review. The live room exposes transcript, claims, agent events and concept coverage without a numeric learning score.
 
-```ts
-// ---------- Concept Pack ----------
-export interface ConceptPack {
-  id: string; version: string; title: string; subject: string; level: string;
-  verificationStatus: "ai_generated_draft" | "source_grounded" | "instructor_approved";
-  objectives: Objective[];
-  prerequisites: string[];          // node ids the novice may treat as known
-  vocabulary: string[];             // terms that must be defined if used
-  nodes: ConceptNode[];
-  edges: ConceptEdge[];
-  misconceptions: Misconception[];
-  transferProbes: TransferProbe[];
-  fallbackQuestions: FallbackQuestion[];
-  acceptableSimplifications: string[];
-  referenceSummary: string;         // report reference tab ONLY. Never in teach-back context.
-}
-export interface Objective { id: string; statement: string; requiredNodeIds: string[]; requiredEdgeIds: string[]; }
-export interface ConceptNode { id: string; name: string; aliases: string[]; definition: string; importance: "core" | "supporting"; }
-export interface ConceptEdge { id: string; from: string; relation: string; to: string; explanation: string; }
-export interface Misconception { id: string; statement: string; detectionHints: string[]; counterQuestion: string; explanation: string; }
-export interface TransferProbe { id: string; question: string; expectedReasoning: string; targetEdgeIds: string[]; }
-export interface FallbackQuestion { id: string; trigger: string; question: string; }
+## Learner reconstruction and context boundaries
 
-// ---------- Session ----------
-export type SessionPhase = "setup" | "listening" | "questioning" | "repair"
-  | "transfer" | "teachback" | "report" | "complete";
-export interface Session {
-  id: string; packId: string; mode: "teacher" | "student";
-  phase: SessionPhase; createdAt: number;
-  questionCount: number;                       // budget: max 5 substantive
-  hintLevelByNode: Record<string, 0 | 1 | 2>;  // simplified hint ladder
-}
-export interface TranscriptSegment {
-  id: string; sessionId: string; speaker: "user" | "novice"; text: string; tMs: number;
-}
+The evaluator and the novice have different inputs. Preserve this separation when changing prompts or shared types:
 
-// ---------- Claims & findings ----------
-export type ClaimStatus = "observed" | "verified" | "contradicted" | "uncertain" | "superseded";
-export interface AtomicClaim {
-  id: string; sessionId: string; statement: string; originalText: string;
-  segmentIds: string[]; nodeIds: string[]; status: ClaimStatus;
-  misconceptionId?: string; supersedesClaimId?: string; createdAtMs: number;
-}
-export type FindingType = "factual_contradiction" | "material_omission" | "undefined_term"
-  | "causal_leap" | "broken_analogy" | "visual_ambiguity" | "transfer_failure";
-export interface Finding {
-  id: string; sessionId: string; type: FindingType;
-  severity: "critical" | "major" | "moderate" | "minor";
-  confidence: "verified" | "likely" | "uncertain";
-  title: string; explanation: string;
-  claimIds: string[]; segmentIds: string[]; nodeIds: string[];
-  sourceRef?: string;                // e.g. "pack:earth-seasons@1.0 edge:tilt-causes-angle"
-  reviewStatus: "not_required" | "queued" | "approved" | "corrected";
-}
+| Component | Input and boundary |
+| --- | --- |
+| Realtime novice | A novice persona, conversation and client-delivered directives; it is instructed to avoid supplying outside knowledge. This is a prompt constraint. |
+| Claim verifier | Claims and the curriculum pack, including reference knowledge, to assess semantic meaning and cite evidence. |
+| Learner model | Taught claim content and provenance, existing beliefs, and prerequisite names. Evaluator status is not a correction source; a contradicted claim remains taught content until repaired. |
+| Teach-back generation | Pack title, prerequisite names, and belief IDs, statements, statuses and ambiguity notes. Reference nodes/edges, findings and raw claims are not serialized into the generation context. |
+| Report composer | Evaluation evidence and learner reconstruction, shown separately from the verified reference. Findings retain links back to claims and transcript segments. |
 
-// ---------- Learner & mastery ----------
-export interface LearnerBelief {
-  id: string; sessionId: string; statement: string;
-  supportingClaimIds: string[]; nodeIds: string[];
-  status: "believed" | "tentative" | "revised"; ambiguityNote?: string;
-}
-export type ConceptState = "unvisited" | "established" | "assisted" | "fragile"
-  | "misconceived" | "missing" | "assumed" | "out_of_scope";
-export interface AssumptionDebtItem {
-  term: string; firstUsedMs: number; laterExplained: boolean; note: string;
-}
+Teach-back first awaits pending extraction/verification, then reconstructs beliefs once per evidence revision. Belief reconstruction stays outside the live question path. Report finalization flushes and refreshes again so post-teach-back corrections are reflected.
 
-// ---------- Orchestration ----------
-export interface Directive {
-  id: string; kind: "ask" | "hint" | "transfer" | "teachback" | "close";
-  utteranceInstruction: string;      // what the novice should say, as an instruction
-  reason: string;                    // recorded diagnostic purpose (shown in agent panel)
-  targetNodeIds: string[]; hintLevel?: 0 | 1 | 2;
-}
-export type AgentName = "claim_mapper" | "verifier" | "coverage" | "pedagogy"
-  | "visual" | "learner_model" | "teachback" | "report";
-export interface AgentEvent {
-  id: string; sessionId: string; agent: AgentName; message: string;
-  tMs: number; payload?: unknown;
-}
-export interface VisualArtifact {
-  id: string; sessionId: string; tMs: number; labels: string[];
-  relations: { from: string; type: string; to: string; confidence: number }[];
-  ambiguities: string[]; imageDataUrl?: string;
-}
-```
+[teachback.ts](../lib/agents/teachback.ts) checks the serialized generation context for verbatim overlap with the reference summary and long edge/misconception explanations. It strips detected overlap before generation and can fall back to reciting the stored belief list. This guard prevents those reference strings from entering the generation call; it is not a semantic proof against all answer leakage. Returned belief IDs are checked against stored beliefs to retain provenance. The reference pack remains available to the guard locally, but is not passed wholesale to the generator.
 
-## 4. `lib/store.ts` — event bus + state
+## Curriculum compilation and review
 
-- Module-level `Map<string, SessionState>` where `SessionState` bundles: `session`, `segments[]`, `claims[]`, `findings[]`, `beliefs[]`, `conceptStates: Record<nodeId, ConceptState>`, `assumptionDebt[]`, `agentEvents[]`, `directives[]`, `visuals[]`.
-- Mutator functions (`addSegment`, `upsertClaim`, `addFinding`, `setConceptState`, `addBelief`, `pushDirective`, `emitAgentEvent`, `setPhase`) each: mutate, snapshot to `data/sessions/<id>.json`, and notify SSE subscribers.
-- SSE message envelope: `{ type: "segment"|"claim"|"finding"|"concept_state"|"belief"|"directive"|"agent_event"|"phase", data: ... }`.
-- `subscribe(sessionId, send)` / `unsubscribe` for the SSE route. On subscribe, replay current state as a `snapshot` message first.
+`/compiler` accepts source text labelled as a syllabus, reference material or instructor notes. [compiler.ts](../lib/agents/compiler.ts) generates a full draft pack, validates graph references, scope labels and exact objective quotations, then asks a critic for warnings. The reviewer inspects the draft before approval.
 
-## 5. Pipeline (the live loop)
+`PUT /api/compiler` revalidates the submitted draft against its source and saves the approved pack with that source text, role, approver label and timestamp. The resulting pack appears in `/setup` and can be used in a new session. The approver label is supplied by the caller; this demo does not authenticate instructor identity.
 
-```
-Realtime transcription (client) ── POST /transcript ──► store.addSegment
-  └─► pipeline tick (debounced ~6s or every 2 user segments):
-        claimMapper(newSegments, pack)        → upsertClaim*, agent_event
-        verifier(newClaims, pack)             → claim status, Finding*, agent_event
-        coverage(allClaims, pack)             → conceptStates, assumptionDebt, agent_event
-        pedagogy(state, pack)                 → Directive (or null), agent_event
-  Directive ── SSE ──► client ── data channel ──► novice speaks
-```
+`/report/[id]` separates learner reconstruction from verified reference material and presents coverage, findings, assumption debt and hint dependency. `/review` supports human review of queued findings. Approval and review are workflow records, not evidence that model judgments are infallible.
 
-- User transcript POSTs trigger the server pipeline without blocking the response. Concurrent ticks share a completion promise and coalesce new work. Teach-back explicitly awaits claim extraction and verification. Learner beliefs are reconstructed on demand once per evidence revision, outside the live question path.
-- **Semantic verification:** misconception hints are context for the verifier, never proof. The verifier distinguishes affirmative assertions from negation, quotation and refutation, and identifies explicit repairs. Only a semantically contradicted claim can select a pack misconception counter-question. Failed verification remains pending and can be retried before teach-back.
-- Session creation begins in `listening`; phase machine (server, in pedagogy): `listening` (min 60s / min 4 user segments, no substantive questions) → `questioning` → `repair` (when a misconception finding exists) → `transfer` (after repair confirmed or question budget ≥3 used) → `teachback` (user presses Finish or budget exhausted) → `report`.
+## Main entry points
 
-## 6. Teach-back isolation (non-negotiable)
+| Path | Responsibility |
+| --- | --- |
+| `app/setup/`, `app/api/sessions/route.ts` | Pack selection and session creation |
+| `app/session/[id]/`, `components/` | Voice, transcript, controls and evidence panels |
+| `app/api/sessions/[id]/` | Transcript, board, event stream and phase actions |
+| `lib/agents/` | Claim, verification, coverage, pedagogy, belief, visual, compiler and report stages |
+| `lib/types.ts`, `lib/packSchema.ts` | Shared contracts and runtime pack validation |
+| `app/compiler/`, `app/report/[id]/`, `app/review/` | Approval, reporting and human review |
 
-`agents/teachback.ts` builds its LLM context from ONLY: `beliefs[]`, `pack.prerequisites` (ids + names), and unresolved `ambiguityNote`s. It must not receive `pack.nodes/edges/referenceSummary`, findings, or claims. System prompt instructs: "You are a novice reconstructing what you were taught. Use only the beliefs listed. Preserve errors and gaps; name your uncertainties." Output: `{ script: string, beliefGraphNodeIds: string[], uncertainties: string[] }`. The client sends `script` to the Realtime novice to speak.
+## Validation and limits
 
-## 7. Env (`.env.local`, `.env.example` in repo)
+Run `npm test`, `npm run typecheck`, `npm run lint` and `npm run build`. The regression suite mocks provider boundaries while exercising session/pack persistence and React reconciliation. Provider smoke scripts in `scripts/` are opt-in live calls. The build fetches Google fonts; Electron compilation and packaging are separate checks.
 
-```
-OPENAI_API_KEY=
-ANTHROPIC_API_KEY=
-REALTIME_MODEL=gpt-realtime
-REASONING_MODEL=claude-sonnet-5
-REASONING_PROVIDER=anthropic   # or openai
-```
+This remains a single-process demonstration with local snapshots, no session restoration or access-control layer, and external model calls for reasoning/voice/vision. Before use with real classroom data or multiple users, it needs authenticated roles, durable session recovery, retention controls and evaluation across subjects. Automated tests establish the covered software behavior, not educational validity or the accuracy of a live model response.
 
-## 8. UI notes (keep it calm, per spec §33.3)
-
-- Live room: left = novice presence + transcript; right = collapsible "Presentation mode" panel with AgentPanel (scrolling agent events with agent name chips), ClaimLedger, ConceptMap (nodes as pills colored+iconed by ConceptState — color-independent icons too).
-- Controls: Push-to-talk toggle, Capture board, Hint, Finish & teach-back.
-- Dark, focused visual style; one accent color; no clutter. Judges see this for ~90 seconds — the agent panel and the concept-state flips are the star.
-- Report page sections in order: Learner reconstruction (tab 1) vs Verified reference (tab 2), coverage map, findings (click → transcript excerpt inline), assumption debt table, hint dependency, "1 finding queued for expert review" link to /review.
+The earlier construction plan remains in [Git history](https://github.com/Jo2234/curio/blob/fa38b2a3253fab42c9d5cbd43be52640ffcd65a2/docs/ARCHITECTURE.md); its task assignments and copied interfaces are not current engineering requirements.
