@@ -7,7 +7,7 @@ import { assertConceptPack } from "./packSchema";
 import type { ConceptPack } from "./types";
 
 const PACKS_DIRECTORY = path.join(process.cwd(), "packs");
-const APPROVED_DIRECTORY = path.join(process.cwd(), "data", "packs");
+const APPROVED_DIRECTORY = path.join(process.env.CURIO_DATA_DIR || path.join(process.cwd(), "data"), "packs");
 const PACK_ID_PATTERN = /^[a-z0-9][a-z0-9_-]*$/i;
 
 function filenames(directory: string): string[] {

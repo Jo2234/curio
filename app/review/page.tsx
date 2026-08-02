@@ -1,11 +1,8 @@
-import { readdir, readFile } from "node:fs/promises";
-import path from "node:path";
-
 import Link from "next/link";
 
 import type { ReviewedFinding } from "@/components/ReportView";
 import { loadPack } from "@/lib/packs";
-import { getSessionState, type SessionState } from "@/lib/store";
+import { listSessionStates, type SessionState } from "@/lib/store";
 import type { ConceptPack } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -17,33 +14,25 @@ interface ReviewTask {
   pack: ConceptPack;
 }
 
-async function queuedTasks(): Promise<ReviewTask[]> {
-  const directory = path.join(process.cwd(), "data", "sessions");
-  let names: string[];
-  try {
-    names = (await readdir(directory)).filter((name) => name.endsWith(".json"));
-  } catch {
-    return [];
-  }
-
-  const tasks = await Promise.all(names.map(async (name): Promise<ReviewTask[]> => {
+async function queuedTasks(): Promise<{ tasks: ReviewTask[]; unavailableIds: string[] }> {
+  const { states, unavailableIds } = listSessionStates();
+  const tasks = states.flatMap(state => {
     try {
-      const diskState = JSON.parse(await readFile(path.join(directory, name), "utf8")) as SessionState;
-      const state = getSessionState(diskState.session.id) ?? diskState;
       const pack = loadPack(state.session.packId);
       return (state.findings as ReviewedFinding[])
-        .filter((finding) => finding.reviewStatus === "queued")
-        .map((finding) => ({ state, finding, pack }));
-    } catch {
+        .filter(finding => finding.reviewStatus === "queued")
+        .map(finding => ({ state, finding, pack }));
+    } catch (error) {
+      console.error(`Cannot load pack for session ${state.session.id}`, error);
+      unavailableIds.push(state.session.id);
       return [];
     }
-  }));
-
-  return tasks.flat().sort((a, b) => {
+  }).sort((a, b) => {
     const severity = { critical: 0, major: 1, moderate: 2, minor: 3 } as const;
     return severity[a.finding.severity] - severity[b.finding.severity]
       || a.state.session.createdAt - b.state.session.createdAt;
   });
+  return { tasks, unavailableIds };
 }
 
 function packRule(pack: ConceptPack, sourceRef?: string): string {
@@ -64,7 +53,7 @@ function time(tMs: number, startedAt: number): string {
 
 export default async function ReviewPage({ searchParams }: { searchParams: Promise<{ finding?: string }> }) {
   const query = await searchParams;
-  const tasks = await queuedTasks();
+  const { tasks, unavailableIds } = await queuedTasks();
   const selected = tasks.find((task) => task.finding.id === query.finding) ?? tasks[0];
 
   return (
@@ -82,9 +71,16 @@ export default async function ReviewPage({ searchParams }: { searchParams: Promi
           </div>
         </header>
 
+        {unavailableIds.length > 0 ? (
+          <section role="alert" className="mt-6 border-2 border-[var(--claim-uncertain)] bg-[var(--bg-panel)] p-4">
+            <h2 className="m-0 text-lg font-semibold">Some saved sessions could not be opened</h2>
+            <p className="mb-0 mt-2">Their snapshots have been preserved. Restore a known-good snapshot or its missing lesson pack to review these sessions: {unavailableIds.join(", ")}.</p>
+          </section>
+        ) : null}
+
         {tasks.length === 0 ? (
           <section className="mt-8 border-2 border-[var(--border-strong)] bg-[var(--bg-panel)] p-8">
-            <h2 className="m-0 font-[var(--font-display)] text-[30px] leading-9">Nothing requires expert judgment.</h2>
+            <h2 className="m-0 font-[var(--font-display)] text-[30px] leading-9">{unavailableIds.length ? "No readable findings are queued." : "Nothing requires expert judgment."}</h2>
             <p className="mb-0 mt-3 max-w-none text-[16px] text-[var(--text-secondary)]">The evidence trail is still available.</p>
           </section>
         ) : (
