@@ -6,7 +6,7 @@ import {
   emitAgentEvent,
   getSessionState,
   setClaimMapperCursor,
-  upsertClaim,
+  commitMappedClaims,
 } from "../store";
 import type { AtomicClaim, ConceptPack, TranscriptSegment } from "../types";
 import { audit } from "./coverage";
@@ -110,14 +110,14 @@ function sanitizeClaims(output: ClaimMapperOutput, segments: TranscriptSegment[]
   });
 }
 
-function upsertExtractedClaims(
+function mappedClaims(
   sessionId: string,
   extracted: ExtractedClaim[],
   segments: TranscriptSegment[],
-): void {
+): AtomicClaim[] {
   const segmentById = new Map(segments.map((segment) => [segment.id, segment]));
 
-  for (const item of extracted) {
+  return extracted.map((item) => {
     const state = getSessionState(sessionId);
     if (!state) throw new Error(`Unknown session: ${sessionId}`);
     const createdAtMs = Math.max(...item.segmentIds.map((id) => segmentById.get(id)?.tMs ?? Date.now()));
@@ -131,8 +131,8 @@ function upsertExtractedClaims(
       status: "observed",
       createdAtMs,
     };
-    upsertClaim(sessionId, claim);
-  }
+    return claim;
+  });
 }
 
 async function processBatch(sessionId: string): Promise<void> {
@@ -162,8 +162,7 @@ async function processBatch(sessionId: string): Promise<void> {
     extracted = fallbackClaims(segments, pack);
   }
 
-  upsertExtractedClaims(sessionId, extracted, segments);
-  setClaimMapperCursor(sessionId, endCursor);
+  commitMappedClaims(sessionId, mappedClaims(sessionId, extracted, segments), endCursor);
   emitAgentEvent(sessionId, {
     id: nanoid(),
     sessionId,

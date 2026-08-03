@@ -2,6 +2,10 @@
 
 Curio is a live understanding rehearsal: teach an AI novice by voice, let reasoning agents map the claims you actually made against an instructor-approved curriculum, then hear the novice teach the idea back using only what it learned from you. The result is an evidence-led view of gaps, misconceptions, assumptions, and moments that deserve human review—without turning learning into a score.
 
+[![Curio report from the offline demonstration](docs/media/curio-report.png)](docs/media/curio-offline-demo.mp4)
+
+[Watch the 76-second walkthrough](docs/media/curio-offline-demo.mp4): setup, evidence, repair, teach-back, report and restart recovery. **Offline demonstration — model responses are fixtures.** The recording shows the real running app with a local fixture provider, synthetic transcript and no voice connection. [Capture details and reproduction](docs/DEMO.md).
+
 ## Quickstart
 
 Use Node.js 22 and copy `.env.example` to `.env.local`. For the current OpenAI runtime, set at least:
@@ -21,7 +25,7 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Runtime session snapshots are written to `data/sessions/` and are not a production database.
+Open [http://localhost:3000](http://localhost:3000). Session snapshots under `data/sessions/` restore automatically when a saved session/report URL is reopened after restart. Keep `data/` on macOS/Linux local storage supporting directory `fsync` and run one server process. Set `CURIO_DATA_DIR` to use another directory for both sessions and approved packs. Corrupt snapshots fail visibly without being overwritten; reading a session never starts a paid model job. In-flight work resumes on the next transcript or Finish action. Voice reconnects separately; see [recovery boundaries](docs/ARCHITECTURE.md#validation-and-limits).
 
 ## Architecture
 
@@ -84,3 +88,7 @@ npm run build
 ```
 
 `npm test` uses mocked model boundaries, real session/pack persistence in a temporary directory, and React reconciliation checks. It never loads provider SDKs or makes network calls. The older `scripts/*Smoke.ts` provider exercises are opt-in live checks and are not part of this suite. The build downloads the declared Google fonts; Electron packaging remains a separate operation.
+
+## License
+
+Original project code and demo fixtures: [MIT](LICENSE). Font and dependency notices: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

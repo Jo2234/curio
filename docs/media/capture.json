@@ -1,0 +1,32 @@
+{
+  "appBuildId": "XqszQ3iAqPF3mAPFfOya4",
+  "browserVersion": "148.0.7778.96",
+  "durationSeconds": 75.75,
+  "bytes": 1039746,
+  "sha256": "cee681ba0b96122320ee4b9df13507920657ea11635f3c10f0632c4027c2b8d2",
+  "capturedAt": "2026-09-11T04:18:51.608Z",
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "mode": "Offline demonstration — model responses are fixtures",
+  "modelCallsOnRestore": 0,
+  "fixtureCalls": [
+    "claims",
+    "results",
+    "claims",
+    "results",
+    "claims",
+    "results",
+    "claims",
+    "results",
+    "beliefs",
+    "script,usedBeliefIds,uncertainties",
+    "summary,recommendedNextStep"
+  ],
+  "sessionURL": "/session/Z8E9p5zzWxz_27tozbkRr",
+  "reportURL": "/report/Z8E9p5zzWxz_27tozbkRr",
+  "audio": false,
+  "browserErrors": [],
+  "caption": "Recording-only DOM overlay; original app UI is otherwise unchanged."
+}

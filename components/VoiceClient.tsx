@@ -395,7 +395,8 @@ export default function VoiceClient({ sessionId }: { sessionId: string }) {
         const event = JSON.parse(message.data) as { type?: string; data?: Directive | SessionSnapshot };
         if (event.type === "directive" && event.data && "id" in event.data) sendDirective(event.data);
         if (event.type === "snapshot" && event.data && "directives" in event.data) {
-          for (const directive of event.data.directives ?? []) sendDirective(directive);
+          // A restored snapshot is history, not a request to replay old questions.
+          for (const directive of event.data.directives ?? []) spokenDirectiveIdsRef.current.add(directive.id);
         }
       } catch {
         // Ignore malformed or unrelated session events.
