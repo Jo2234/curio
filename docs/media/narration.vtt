@@ -1,0 +1,63 @@
+WEBVTT
+
+1
+00:00:00.500 --> 00:00:04.063
+Curio tests your explanations through a
+simulated learner.
+
+2
+00:00:05.800 --> 00:00:10.771
+Choose a lesson on seasons. This offline demo
+uses scripted model responses.
+
+3
+00:00:11.800 --> 00:00:14.616
+The session opens its concept map and evidence.
+
+4
+00:00:16.000 --> 00:00:22.891
+A sample explanation wrongly blames summer on
+distance from the Sun. The claim ledger records
+the problem.
+
+5
+00:00:24.000 --> 00:00:30.677
+The teacher corrects that claim, but leaves
+daylight unexplained. The map updates, and
+uncertainty stays visible.
+
+6
+00:00:31.600 --> 00:00:35.803
+Finishing the session produces a teach-back from
+the recorded explanation.
+
+7
+00:00:38.000 --> 00:00:42.395
+The report preserves what the learner
+understood, including the remaining gap.
+
+8
+00:00:43.800 --> 00:00:46.595
+The learner account keeps that uncertainty
+visible.
+
+9
+00:00:49.000 --> 00:00:54.035
+After a real server restart, the saved report
+reloads with no new model calls.
+
+10
+00:00:55.700 --> 00:00:59.071
+A separate reference tab shows the complete
+explanation.
+
+11
+00:01:00.600 --> 00:01:05.229
+Human review keeps the unresolved claim and its
+transcript evidence together.
+
+12
+00:01:06.500 --> 00:01:14.457
+Finally, the original session reopens with its
+saved transcript. Voice would need reconnecting;
+earlier questions are not replayed.
