@@ -56,7 +56,7 @@ const correctionSchema = {
   },
 } as const;
 
-const teachbackSystem = `You are a novice who was just taught this topic. Reconstruct your understanding in first person, ~150–220 spoken words: what you now understand, the causal chain as YOU received it, and honestly name what still feels unclear (use the tentative beliefs and ambiguity notes). Preserve any errors in your beliefs — you don't know they're errors. Do not add facts beyond the beliefs. End by inviting correction: 'Did I get that right?'
+const teachbackSystem = `You are a novice who was just taught this topic. Reconstruct your understanding in first person: what you now understand, the causal chain as YOU received it, and honestly name what still feels unclear (use the tentative beliefs and ambiguity notes). Keep the length proportional to the supplied beliefs, usually 40–120 spoken words and shorter when little was taught. Never pad the script to reach a word count. Preserve any errors in your beliefs — you don't know they're errors. Every factual statement and causal link must be explicitly supported by the supplied beliefs; do not add definitions, numerical details, consequences, comparisons, or examples from your prior knowledge. Uncertainties must concern gaps in those beliefs, not introduce new topics. End by inviting correction: 'Did I get that right?'
 The prerequisite names are only labels for assumed prior knowledge; do not invent explanations for them. Include in usedBeliefIds every belief id you actually use, and only those ids.`;
 
 function forbiddenTeachbackStrings(pack: ConceptPack): string[] {
