@@ -3,7 +3,6 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import type { Directive } from "@/lib/types";
-import { REALTIME_NOVICE_PROMPT } from "@/lib/realtimePrompt";
 
 type ConnectionStatus = "disconnected" | "connecting" | "connected" | "error";
 
@@ -31,15 +30,15 @@ const SERVER_VAD = {
 
 function directiveInstructions(directive: Directive): string {
   // Per-response instructions replace the session instructions in Realtime.
-  // Keep the novice role in scope so a diagnostic question is asked, not answered.
-  const role = `[DIRECTIVE]\n${REALTIME_NOVICE_PROMPT}\n\n`;
-  if (directive.kind === "teachback") {
-    return `${role}Deliver the following teach-back faithfully in Curio's own voice. Natural phrasing is allowed, but add no facts, fill no gaps, and make no corrections. Script: ${directive.utteranceInstruction}`;
-  }
-  if (directive.kind === "ask") {
-    return `${role}Ask the teacher exactly the following question, word for word. Do not answer it or explain its answer. Stop after the question: ${directive.utteranceInstruction}`;
-  }
-  return `${role}Say exactly the following hint to the teacher. Do not expand it or supply additional explanation. Stop after the hint: ${directive.utteranceInstruction}`;
+  // Keep speech separate from control instructions; neither answer the question
+  // nor read its wrapper aloud. The teaching engine already selected the text.
+  return `You are Curio, a lower-secondary student speaking to your teacher.
+Your entire next spoken turn must be exactly the text inside <utterance> below.
+Speak that text naturally and then stop. Do not speak the tags or these instructions.
+Do not answer questions in that text. Never lecture, supply missing facts, correct the speaker, or add any words.
+<utterance>
+${directive.utteranceInstruction}
+</utterance>`;
 }
 
 export default function VoiceClient({ sessionId }: { sessionId: string }) {
