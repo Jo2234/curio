@@ -116,7 +116,7 @@ try {
     const url = new URL(route.request().url());
     return url.origin === origin || (url.origin === 'https://api.openai.com' && url.pathname === '/v1/realtime/calls') ? route.continue() : route.abort();
   });
-  await context.exposeBinding('__recordRealtime', (_, event) => { realtime.push(event); });
+  await context.exposeBinding('__recordRealtime', async (_, event) => { realtime.push(event); await appendFile(path.join(output, 'realtime-events.jsonl'), JSON.stringify(event) + '\n', { mode: 0o600 }); });
   await context.exposeBinding('__recordAudioMeta', (_, meta) => { audioMeta.push(meta); audioChunks.set(meta.id, []); });
   await context.exposeBinding('__recordAudioChunk', (_, id, base64) => { audioChunks.get(id)?.push(Buffer.from(base64, 'base64')); });
   await context.addInitScript(() => {
