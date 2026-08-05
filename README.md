@@ -4,7 +4,7 @@ Curio is a live understanding rehearsal: teach an AI novice by voice, let reason
 
 [![Curio report from the offline demonstration](docs/media/curio-report.png)](docs/media/curio-offline-demo.mp4)
 
-[Watch the 76-second walkthrough](docs/media/curio-offline-demo.mp4): setup, evidence, repair, teach-back, report and restart recovery. **Offline demonstration — model responses are fixtures.** The recording shows the real running app with a local fixture provider, synthetic transcript and no voice connection. [Capture details and reproduction](docs/DEMO.md).
+[Watch the narrated 76-second walkthrough](docs/media/curio-offline-demo.mp4): setup, evidence, repair, teach-back, report and restart recovery. **Offline demonstration — model responses are fixtures.** The recording shows the real running app with a local fixture provider, synthetic transcript and no voice connection. English voiceover explains the sequence; it was added in post-production and is not an app voice connection. [Captions](docs/media/narration.vtt) · [Narration script](docs/media/narration.json) · [Capture details and reproduction](docs/DEMO.md).
 
 ## Quickstart
 
