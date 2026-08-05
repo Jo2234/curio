@@ -34,6 +34,9 @@ yarn-error.log*
 .env*
 !.env.example
 
+# local capture output
+/.artifacts/
+
 # runtime session snapshots
 /data/
 

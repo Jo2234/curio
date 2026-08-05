@@ -1,0 +1,10 @@
+{
+  "slug": "curio",
+  "video_packets_unchanged": true,
+  "sha256": "5c73f88ef3919e3ab2915d41214f5fc555c5e7f5feae3020bb0edaf4cd1d9ce7",
+  "duration_seconds": 122.791667,
+  "bytes": 7075107,
+  "audio_codec": "aac",
+  "caption_cues": 26,
+  "cues_in_bounds": true
+}

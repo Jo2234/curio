@@ -11,7 +11,7 @@ import { startFixtureProvider } from './provider.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const { chromium } = await import(process.env.CURIO_PLAYWRIGHT_MODULE || 'playwright');
 const temporary = await mkdtemp(path.join(os.tmpdir(), 'curio-demo-'));
-const output = path.join(root, 'docs/media');
+const output = path.join(root, '.artifacts/offline-demo');
 await mkdir(output, { recursive: true });
 const provider = await startFixtureProvider();
 const port = Number(process.env.CURIO_DEMO_PORT || 3198);
