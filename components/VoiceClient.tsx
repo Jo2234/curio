@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import type { Directive } from "@/lib/types";
+import { REALTIME_NOVICE_PROMPT } from "@/lib/realtimePrompt";
 
 type ConnectionStatus = "disconnected" | "connecting" | "connected" | "error";
 
@@ -29,10 +30,16 @@ const SERVER_VAD = {
 } as const;
 
 function directiveInstructions(directive: Directive): string {
+  // Per-response instructions replace the session instructions in Realtime.
+  // Keep the novice role in scope so a diagnostic question is asked, not answered.
+  const role = `[DIRECTIVE]\n${REALTIME_NOVICE_PROMPT}\n\n`;
   if (directive.kind === "teachback") {
-    return `[DIRECTIVE] Deliver the following teach-back faithfully in Curio's own voice. Natural phrasing is allowed, but add no facts, fill no gaps, and make no corrections. Script: ${directive.utteranceInstruction}`;
+    return `${role}Deliver the following teach-back faithfully in Curio's own voice. Natural phrasing is allowed, but add no facts, fill no gaps, and make no corrections. Script: ${directive.utteranceInstruction}`;
   }
-  return `[DIRECTIVE] ${directive.utteranceInstruction}`;
+  if (directive.kind === "ask") {
+    return `${role}Ask the teacher exactly the following question, word for word. Do not answer it or explain its answer. Stop after the question: ${directive.utteranceInstruction}`;
+  }
+  return `${role}Say exactly the following hint to the teacher. Do not expand it or supply additional explanation. Stop after the hint: ${directive.utteranceInstruction}`;
 }
 
 export default function VoiceClient({ sessionId }: { sessionId: string }) {
