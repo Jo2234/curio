@@ -2,6 +2,8 @@
 
 Curio helps you rehearse an explanation by teaching an AI novice. It checks your claims against an instructor-approved curriculum, asks follow-up questions, and produces a spoken teach-back and a report of the learner’s beliefs and remaining gaps. You can speak or type, inspect the evidence, and return to a saved session.
 
+> Built in one day at BUIDL OPC Hackathon SG (12 July 2026) under the event’s fresh-code rule. September 2026 follow-up commits improve lesson verification, compiled packs, session persistence, and speech, and add documentation and walkthroughs; see the [commit history](https://github.com/Jo2234/curio/commits/master/).
+
 [![Curio report from the live seasons lesson](docs/media/curio-live.png)](docs/media/curio-live.mp4)
 
 [Watch the narrated two-minute walkthrough](docs/media/curio-live.mp4): explain seasons, inspect a misconception, correct it, hear Curio teach it back, and reopen the saved report after a server restart. The recording uses real OpenAI reasoning and Realtime replies, with example explanations typed into the app. A separate narrator explains the screen between Curio’s spoken responses. [Captions](docs/media/curio-live.vtt) · [Transcript](docs/media/curio-live.txt) · [Capture provenance and reproduction](docs/DEMO.md).
