@@ -38,6 +38,7 @@ type StreamEvent =
   | { type: "finding"; data: Finding }
   | { type: "concept_state"; data: { nodeId: string; state: ConceptState } }
   | { type: "belief"; data: LearnerBelief }
+  | { type: "beliefs"; data: LearnerBelief[] }
   | { type: "teachback_result"; data: unknown }
   | { type: "directive"; data: Directive }
   | { type: "agent_event"; data: AgentEvent }
@@ -51,6 +52,7 @@ const streamEventTypes = new Set<StreamEvent["type"]>([
   "finding",
   "concept_state",
   "belief",
+  "beliefs",
   "teachback_result",
   "directive",
   "agent_event",
@@ -98,6 +100,8 @@ function reducer(state: SessionStreamState, event: StreamEvent): SessionStreamSt
       return { ...state, conceptStates: { ...state.conceptStates, [event.data.nodeId]: event.data.state } };
     case "belief":
       return { ...state, beliefs: upsert(state.beliefs, event.data) };
+    case "beliefs":
+      return { ...state, beliefs: event.data };
     case "teachback_result":
       return state;
     case "directive":

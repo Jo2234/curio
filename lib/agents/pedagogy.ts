@@ -26,8 +26,7 @@ const EXPLANATION_PAUSE_MS = 4_000;
 const LISTENING_MIN_MS = 60_000;
 const LISTENING_MIN_SEGMENTS = 4;
 const MISCONCEPTION_INTERRUPT_SEGMENTS = 2;
-const PIPELINE_FLUSH_TIMEOUT_MS = 10_000;
-const PIPELINE_FLUSH_POLL_MS = 50;
+
 
 type DirectiveEventPayload = {
   directiveId?: string;
@@ -121,7 +120,7 @@ function unresolvedMisconceptions(state: SessionState, pack: ConceptPack) {
     const contradictions = state.claims.filter((claim) =>
       claim.misconceptionId === misconception.id &&
       (claim.status === "contradicted" || claim.status === "superseded"));
-    const repaired = contradictions.some((claim) => hasVerifiedRepair(claim, finding, state.claims));
+    const repaired = contradictions.length > 0 && contradictions.every((claim) => hasVerifiedRepair(claim, finding, state.claims));
     return repaired ? [] : [{ finding, misconception, contradictions }];
   });
 }
@@ -130,7 +129,7 @@ function hasVerifiedRepair(contradiction: AtomicClaim, finding: Finding, claims:
   const targetNodes = new Set([...contradiction.nodeIds, ...finding.nodeIds]);
   return claims.some((claim) =>
     claim.status === "verified" &&
-    claim.createdAtMs > contradiction.createdAtMs &&
+    (claim.supersedesClaimId === contradiction.id || claim.createdAtMs >= contradiction.createdAtMs) &&
     claim.nodeIds.some((nodeId) => targetNodes.has(nodeId)) &&
     (claim.supersedesClaimId === contradiction.id || contradiction.status === "superseded"));
 }
@@ -369,82 +368,44 @@ async function runTransfer(sessionId: string, state: SessionState, pack: Concept
   if (fresh?.session.questionCount === QUESTION_BUDGET) await enterTeachback(sessionId);
 }
 
-function normalizeTeachbackDirective(value: unknown): Omit<Directive, "id"> | undefined {
-  if (typeof value === "string" && value.trim()) {
-    return {
-      kind: "teachback",
-      utteranceInstruction: value.trim(),
-      reason: "Curio is reconstructing the lesson using only the learner beliefs recorded from the user's teaching.",
-      targetNodeIds: [],
-    };
-  }
-  if (!value || typeof value !== "object") return undefined;
-  const candidate = value as Partial<Directive> & { script?: unknown };
-  const utterance = typeof candidate.utteranceInstruction === "string"
-    ? candidate.utteranceInstruction
-    : typeof candidate.script === "string" ? candidate.script : undefined;
-  if (!utterance) return undefined;
-  return {
-    kind: "teachback",
-    utteranceInstruction: utterance,
-    reason: typeof candidate.reason === "string" && candidate.reason.trim()
-      ? candidate.reason
-      : "Curio is reconstructing the lesson using only the learner beliefs recorded from the user's teaching.",
-    targetNodeIds: Array.isArray(candidate.targetNodeIds) ? candidate.targetNodeIds : [],
-  };
+const finalizations = new Map<string, Promise<void>>();
+
+function finalize(sessionId: string, action: () => Promise<void>): Promise<void> {
+  const pending = finalizations.get(sessionId);
+  if (pending) return pending;
+  const promise = Promise.resolve().then(action).finally(() => finalizations.delete(sessionId));
+  finalizations.set(sessionId, promise);
+  return promise;
 }
 
-async function enterTeachback(sessionId: string): Promise<void> {
-  let state = getSessionState(sessionId);
-  if (!state) throw new Error(`Unknown session: ${sessionId}`);
-  if (state.session.phase !== "teachback") setPhase(sessionId, "teachback");
-  if (state.directives.some((directive) => directive.kind === "teachback")) return;
-  try {
-    const targetSegmentCount = state.segments.length;
-    const deadline = Date.now() + PIPELINE_FLUSH_TIMEOUT_MS;
-    while (Date.now() < deadline) {
-      state = getSessionState(sessionId);
-      if (!state) throw new Error(`Unknown session: ${sessionId}`);
-      const lastMapperEvent = state.agentEvents.findLastIndex((event) => event.agent === "claim_mapper");
-      const lastLearnerEvent = state.agentEvents.findLastIndex((event) => event.agent === "learner_model");
-      const mappingCaughtUp = state.claimMapperCursor >= targetSegmentCount;
-      const learnerCaughtUp = lastMapperEvent === -1 || lastLearnerEvent > lastMapperEvent;
-      if (mappingCaughtUp && learnerCaughtUp) break;
-      await new Promise((resolve) => setTimeout(resolve, PIPELINE_FLUSH_POLL_MS));
-    }
-    const learnerModel = await import("./learnerModel");
-    await learnerModel.updateBeliefs(sessionId);
-
-    const teachbackAgent = await import("./teachback");
-    const generate = (teachbackAgent as { generate?: (id: string) => unknown }).generate;
-    if (typeof generate !== "function") return;
-    const result = await generate(sessionId);
-    const directive = normalizeTeachbackDirective(result);
-    const fresh = getSessionState(sessionId);
-    if (directive && fresh) pushPedagogyDirective(sessionId, directive, {}, false);
-  } catch (error) {
-    console.error("Teach-back generation unavailable", error);
-  }
+function enterTeachback(sessionId: string): Promise<void> {
+  return finalize(sessionId, async () => {
+    const state = getSessionState(sessionId);
+    if (!state) throw new Error(`Unknown session: ${sessionId}`);
+    if (state.directives.some((directive) => directive.kind === "teachback")) return;
+    await (await import("./claimMapper")).flushPipeline(sessionId);
+    await (await import("./learnerModel")).updateBeliefs(sessionId);
+    const directive = await (await import("./teachback")).generate(sessionId);
+    setPhase(sessionId, "teachback");
+    pushPedagogyDirective(sessionId, directive, {}, false);
+  });
 }
 
-async function enterReport(sessionId: string): Promise<void> {
-  const state = getSessionState(sessionId);
-  if (!state) throw new Error(`Unknown session: ${sessionId}`);
-  setPhase(sessionId, "report");
-  try {
-    const reportAgent = await import("./reportComposer");
-    const compose = (reportAgent as { compose?: (id: string) => unknown }).compose;
-    if (typeof compose === "function") await compose(sessionId);
-  } catch (error) {
-    console.error("Report composition unavailable", error);
-  }
+function enterReport(sessionId: string): Promise<void> {
+  return finalize(sessionId, async () => {
+    await (await import("./claimMapper")).flushPipeline(sessionId);
+    // A user may have corrected the novice after hearing the teach-back.
+    await (await import("./learnerModel")).updateBeliefs(sessionId);
+    await (await import("./reportComposer")).compose(sessionId);
+    setPhase(sessionId, "report");
+  });
 }
 
 async function decideUnlocked(sessionId: string): Promise<void> {
   let state = getSessionState(sessionId);
   if (!state) throw new Error(`Unknown session: ${sessionId}`);
   const pack = loadPack(state.session.packId);
-  if (["setup", "teachback", "report", "complete"].includes(state.session.phase)) return;
+  if (finalizations.has(sessionId) || ["setup", "teachback", "report", "complete"].includes(state.session.phase)) return;
 
   const unresolved = unresolvedMisconceptions(state, pack);
 

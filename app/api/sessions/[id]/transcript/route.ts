@@ -64,6 +64,6 @@ export async function POST(
     return Response.json({ error: "Could not save transcript" }, { status: 500 });
   }
 
-  triggerPipeline(sessionId);
+  if (speaker === "user") triggerPipeline(sessionId);
   return Response.json({ segment }, { status: 201 });
 }

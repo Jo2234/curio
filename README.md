@@ -58,11 +58,11 @@ you speak ─► Claim mapper ─► Verifier ─► Coverage ─► Pedagogy �
     └──────────────────────────── you answer ◄────────────────────────────┘
 ```
 
-The **live loop** extracts an `AtomicClaim`, verifies it against the approved curriculum contract, updates coverage, then asks the pedagogy orchestrator to score candidate questions and emit one `Directive` with its reason recorded. The resulting question and answer begin the next revolution.
+The **live loop** extracts an `AtomicClaim`, verifies its actual meaning against the approved curriculum contract, updates coverage, then asks the pedagogy orchestrator to select one question and emit a `Directive` with its reason recorded. Keyword matches never establish contradictions on their own; negations and refutations are verified in context. The resulting question and answer begin the next revolution.
 
-The **compile loop** turns sources into a concept graph and misconception probes, passes the draft through a pack critic, and stops for human approval. Its output is a versioned evaluation contract: human judgment compiled once, then executed consistently in every session.
+The **compile loop** generates a complete runtime pack from the source, including linked objectives, concept graph, misconception and transfer probes. It validates references and exact objective quotations, passes the draft through a pack critic, and stops for human approval. Approved packs are saved under `data/packs/` and selected directly in session setup. Its output is a versioned evaluation contract: human judgment compiled once, then executed consistently in every session.
 
-The **learner-model loop** converts claims into beliefs, generates an isolated reverse teach-back, accepts the learner's corrections, and rebuilds those beliefs. Curio's teach-back can only use what the learner taught.
+The **learner-model loop** waits for pending claim verification before teach-back, reconstructs beliefs once per evidence revision, and refreshes them before the report if the user corrected the novice. Live questions do not wait for belief reconstruction. Curio's teach-back can only use what the learner taught.
 
 These agents are not theater. `AgentEvent` records what each stage observed or changed; `AtomicClaim` (the claim record) carries testable evidence through verification; and `Directive` is the explicit steering instruction consumed by the novice. Those types make the hand-offs inspectable rather than implicit prompt choreography.
 
@@ -70,3 +70,15 @@ Three context boundaries create three different minds on the same model tiers: t
 
 The Next.js App Router hosts the UI and APIs. An in-memory store plus JSON snapshots holds demo sessions; SSE streams server-side agent events to the room; OpenAI Realtime handles live voice; and structured reasoning helpers support both OpenAI and Anthropic providers. Teach-back is deliberately isolated from the reference pack so Curio can reproduce only the learner beliefs it was given.
 
+
+## Local validation
+
+```bash
+npm ci
+npm test
+npm run typecheck
+npm run lint
+npm run build
+```
+
+`npm test` uses mocked model boundaries, real session/pack persistence in a temporary directory, and React reconciliation checks. It never loads provider SDKs or makes network calls. The older `scripts/*Smoke.ts` provider exercises are opt-in live checks and are not part of this suite. The build downloads the declared Google fonts; Electron packaging remains a separate operation.
