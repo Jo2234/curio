@@ -2,14 +2,16 @@ import { nanoid } from "nanoid";
 
 import { jsonCall } from "../llm";
 import { loadPack } from "../packs";
-import { addFinding, emitAgentEvent, getSessionState, upsertClaim, upsertFinding } from "../store";
-import type { AtomicClaim, ConceptPack, Misconception } from "../types";
+import { addFinding, emitAgentEvent, getSessionState, upsertClaim } from "../store";
+import type { AtomicClaim, ConceptPack } from "../types";
 
 interface VerificationResult {
   claimId: string;
   status: "verified" | "uncertain" | "contradicted";
   explanation: string;
   sourceRef: string;
+  misconceptionId: string | null;
+  repairedClaimIds: string[];
 }
 
 interface VerifierOutput {
@@ -26,262 +28,147 @@ const verificationSchema = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["claimId", "status", "explanation", "sourceRef"],
+        required: ["claimId", "status", "explanation", "sourceRef", "misconceptionId", "repairedClaimIds"],
         properties: {
           claimId: { type: "string" },
           status: { type: "string", enum: ["verified", "uncertain", "contradicted"] },
           explanation: { type: "string" },
           sourceRef: { type: "string" },
+          misconceptionId: { type: ["string", "null"] },
+          repairedClaimIds: { type: "array", items: { type: "string" } },
         },
       },
     },
   },
 } as const;
 
-function userDerived(claim: AtomicClaim, userSegmentIds: Set<string>): boolean {
-  return claim.segmentIds.some((id) => userSegmentIds.has(id));
-}
-
-function hintHit(text: string, misconception: Misconception): boolean {
-  const lower = text.toLocaleLowerCase();
-  return misconception.detectionHints.some((hint) => lower.includes(hint.toLocaleLowerCase()));
-}
-
-function mappedNodes(text: string, pack: ConceptPack): string[] {
-  const normalize = (value: string) => value.toLocaleLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-  const lower = normalize(text);
-  return pack.nodes
-    .filter((node) => [node.name, ...node.aliases].some((name) => lower.includes(normalize(name))))
-    .map((node) => node.id);
-}
-
-function deterministicPass(sessionId: string, pack: ConceptPack): void {
-  const state = getSessionState(sessionId);
-  if (!state) throw new Error(`Unknown session: ${sessionId}`);
-  const userSegments = state.segments.filter((segment) => segment.speaker === "user");
-  const userSegmentIds = new Set(userSegments.map((segment) => segment.id));
-  const recentSegments = userSegments.slice(-12);
-
-  for (const misconception of pack.misconceptions) {
-    const hitSegments = recentSegments.filter((segment) => hintHit(segment.text, misconception));
-    const misconceptionClaims = state.claims.filter((claim) => claim.misconceptionId === misconception.id);
-    const directClaims = state.claims.filter((claim) =>
-      ["observed", "uncertain"].includes(claim.status) &&
-      userDerived(claim, userSegmentIds) &&
-      hintHit(`${claim.statement}\n${claim.originalText}`, misconception));
-    const linkedClaims = state.claims.filter((claim) =>
-      ["observed", "uncertain"].includes(claim.status) &&
-      userDerived(claim, userSegmentIds) &&
-      claim.segmentIds.some((id) => hitSegments.some((segment) => segment.id === id)));
-    const candidateClaims = directClaims.length > 0 ? directClaims : linkedClaims.slice(0, 1);
-
-    if (hitSegments.length === 0 && candidateClaims.length === 0) continue;
-
-    let canonicalClaim = misconceptionClaims[0] ?? candidateClaims[0];
-    if (!canonicalClaim && hitSegments.length > 0) {
-      const segment = hitSegments[0];
-      canonicalClaim = {
-        id: nanoid(),
-        sessionId,
-        statement: segment.text,
-        originalText: segment.text,
-        segmentIds: [segment.id],
-        nodeIds: mappedNodes(segment.text, pack),
-        status: "observed",
-        createdAtMs: segment.tMs,
-      };
-    }
-    if (!canonicalClaim) continue;
-
-    const duplicateClaims = [...misconceptionClaims, ...candidateClaims].filter((claim, index, claims) =>
-      claim.id !== canonicalClaim.id && claims.findIndex((candidate) => candidate.id === claim.id) === index);
-    const evidenceClaims = [canonicalClaim, ...duplicateClaims];
-    const previousSegmentIds = new Set(canonicalClaim.segmentIds);
-    const segmentIds = [...new Set([
-      ...evidenceClaims.flatMap((claim) => claim.segmentIds),
-      ...hitSegments.map((segment) => segment.id),
-    ])];
-    const nodeIds = [...new Set([
-      ...evidenceClaims.flatMap((claim) => claim.nodeIds),
-      ...mappedNodes(`${canonicalClaim.statement} ${misconception.statement} ${misconception.explanation}`, pack),
-    ])];
-    const updatedClaim: AtomicClaim = {
-      ...canonicalClaim,
-      segmentIds,
-      nodeIds,
-      status: "contradicted",
-      misconceptionId: misconception.id,
-    };
-    upsertClaim(sessionId, updatedClaim);
-
-    for (const duplicate of duplicateClaims) {
-      // Mapper output can repeat an extracted claim. Keep the audit record, but
-      // prevent it from becoming a second live contradiction or reaching the LLM.
-      upsertClaim(sessionId, {
-        ...duplicate,
-        status: "superseded",
-      });
-    }
-
-    const attachedClaims = [updatedClaim];
-
-    const freshState = getSessionState(sessionId);
-    if (!freshState) throw new Error(`Unknown session: ${sessionId}`);
-    const existingFinding = freshState.findings.find((finding) =>
-      finding.sourceRef === `pack:${pack.id}@${pack.version} mc:${misconception.id}`);
-    if (!existingFinding) {
-      addFinding(sessionId, {
-        id: nanoid(),
-        sessionId,
-        type: "factual_contradiction",
-        severity: "major",
-        confidence: "verified",
-        title: misconception.statement,
-        explanation: misconception.explanation,
-        claimIds: attachedClaims.map((claim) => claim.id),
-        segmentIds: [...new Set([...hitSegments.map((segment) => segment.id), ...attachedClaims.flatMap((claim) => claim.segmentIds)])],
-        nodeIds: [...new Set(attachedClaims.flatMap((claim) => claim.nodeIds))],
-        sourceRef: `pack:${pack.id}@${pack.version} mc:${misconception.id}`,
-        reviewStatus: "not_required",
-      });
-    } else {
-      upsertFinding(sessionId, {
-        ...existingFinding,
-        claimIds: [updatedClaim.id],
-        segmentIds: [...new Set([...existingFinding.segmentIds, ...hitSegments.map((segment) => segment.id)])],
-        nodeIds: [...new Set([...existingFinding.nodeIds, ...attachedClaims.flatMap((claim) => claim.nodeIds)])],
-      });
-    }
-    if (misconceptionClaims.length === 0 || segmentIds.some((id) => !previousSegmentIds.has(id))) {
-      emitAgentEvent(sessionId, {
-        id: nanoid(),
-        sessionId,
-        agent: "verifier",
-        message: `Contradiction detected: ${misconception.statement}`,
-        tMs: Date.now(),
-        payload: { misconceptionId: misconception.id },
-      });
-    }
-  }
-
-}
-
 function verifierSystem(pack: ConceptPack): string {
   return [
     "You are Curio's evidence verifier. Classify every supplied claim exactly once.",
     "verified means directly supported by a concept node or edge. uncertain means the pack does not cover it or the wording is genuinely unclear.",
-    "contradicted means it conflicts with a node or edge. For contradicted results, sourceRef must cite that node or edge.",
+    "contradicted means it conflicts with the pack. Cite sourceRef as pack:<id>@<version> node:<id>, edge:<id>, or mc:<id>.",
+    "Keyword matches are only candidates: a negation, quotation, question, or refutation of a misconception is NOT an assertion of that misconception. Judge what the speaker actually endorses.",
+    "For a contradicted claim, set misconceptionId only if it actually asserts a listed misconception; otherwise null. For all other statuses use null.",
+    "For a verified claim, repairedClaimIds may list earlier contradictions that this statement explicitly corrects. Shared topic words alone are not a repair. An earlier contradiction may be in earlierContradictions or earlier in the supplied transcript, including this batch. Use only supplied claim ids; otherwise use [].",
     "Every acceptable simplification listed below is verified, never contradicted.",
     `Pack id/version: ${pack.id}@${pack.version}`,
     `Nodes: ${JSON.stringify(pack.nodes.map(({ id, name, definition }) => ({ id, name, definition })))}`,
     `Edges: ${JSON.stringify(pack.edges)}`,
+    `Misconceptions: ${JSON.stringify(pack.misconceptions)}`,
     `Acceptable simplifications: ${JSON.stringify(pack.acceptableSimplifications)}`,
   ].join("\n");
 }
 
-function addLlmFinding(sessionId: string, claim: AtomicClaim, result: VerificationResult): void {
-  const state = getSessionState(sessionId);
-  if (!state || state.findings.some((finding) => finding.type === "factual_contradiction" && finding.claimIds.includes(claim.id))) return;
-  addFinding(sessionId, {
-    id: nanoid(),
-    sessionId,
-    type: "factual_contradiction",
-    severity: "major",
-    confidence: "likely",
-    title: "Claim conflicts with the concept pack",
-    explanation: result.explanation,
-    claimIds: [claim.id],
-    segmentIds: claim.segmentIds,
-    nodeIds: claim.nodeIds,
-    sourceRef: result.sourceRef,
-    reviewStatus: "not_required",
-  });
-}
-
-function queueFirstUncertainFinding(sessionId: string, claim: AtomicClaim, result: VerificationResult): void {
-  const state = getSessionState(sessionId);
-  if (!state || state.findings.some((finding) => finding.confidence === "uncertain" && finding.reviewStatus === "queued")) return;
-  addFinding(sessionId, {
-    id: nanoid(),
-    sessionId,
-    type: "causal_leap",
-    severity: "moderate",
-    confidence: "uncertain",
-    title: "Claim needs expert review",
-    explanation: result.explanation || "The explanation supports this, but does not settle it.",
-    claimIds: [claim.id],
-    segmentIds: claim.segmentIds,
-    nodeIds: claim.nodeIds,
-    ...(result.sourceRef ? { sourceRef: result.sourceRef } : {}),
-    reviewStatus: "queued",
-  });
+function hasPackCitation(sourceRef: string, pack: ConceptPack): boolean {
+  const prefix = `pack:${pack.id}@${pack.version} `;
+  if (!sourceRef.startsWith(prefix)) return false;
+  const [kind, id] = sourceRef.slice(prefix.length).split(":");
+  const items = kind === "node" ? pack.nodes : kind === "edge" ? pack.edges : kind === "mc" ? pack.misconceptions : [];
+  return items.some((item) => item.id === id);
 }
 
 export async function verifyNewClaims(sessionId: string): Promise<void> {
-  const initialState = getSessionState(sessionId);
-  if (!initialState) throw new Error(`Unknown session: ${sessionId}`);
-  const pack = loadPack(initialState.session.packId);
-
-  deterministicPass(sessionId, pack);
-
   const state = getSessionState(sessionId);
   if (!state) throw new Error(`Unknown session: ${sessionId}`);
+  const pack = loadPack(state.session.packId);
   const userSegmentIds = new Set(state.segments.filter((segment) => segment.speaker === "user").map((segment) => segment.id));
-  const claims = state.claims.filter((claim) => claim.status === "observed" && userDerived(claim, userSegmentIds));
-  if (claims.length === 0) {
-    if (!state.agentEvents.some((event) => event.agent === "verifier" && event.tMs >= initialState.session.createdAt)) {
-      emitAgentEvent(sessionId, {
-        id: nanoid(), sessionId, agent: "verifier", message: "No new claims to verify", tMs: Date.now(),
-      });
-    }
-    return;
-  }
-
+  const claims = state.claims.filter((claim) => claim.status === "observed" && claim.segmentIds.some((id) => userSegmentIds.has(id)));
+  if (claims.length === 0) return;
+  const previousContradictions = state.claims.filter((claim) => claim.status === "contradicted");
+  const evidenceSegmentIds = new Set([...previousContradictions, ...claims].flatMap((claim) => claim.segmentIds));
   let output: VerifierOutput;
   try {
     output = await jsonCall<VerifierOutput>({
       system: verifierSystem(pack),
-      user: JSON.stringify({ claims: claims.map(({ id, statement, originalText, nodeIds }) => ({ id, statement, originalText, nodeIds })) }),
+      user: JSON.stringify({
+        claims: claims.map(({ id, statement, originalText, nodeIds, segmentIds }) => ({ id, statement, originalText, nodeIds, segmentIds })),
+        transcript: state.segments.filter((segment) => evidenceSegmentIds.has(segment.id)).map(({ id, text }) => ({ id, text })),
+        earlierContradictions: previousContradictions.map(({ id, statement, originalText }) => ({ id, statement, originalText })),
+      }),
       schema: verificationSchema,
-      maxTokens: 1_500,
+      maxTokens: 2_000,
     });
   } catch (error) {
-    console.error("Verifier LLM call failed; deterministic results remain available", error);
     emitAgentEvent(sessionId, {
-      id: nanoid(),
-      sessionId,
-      agent: "verifier",
-      message: `Verification deferred for ${claims.length} claims; deterministic checks completed`,
+      id: nanoid(), sessionId, agent: "verifier",
+      message: `Verification deferred for ${claims.length} claims; no keyword match has been treated as proof`,
       tMs: Date.now(),
     });
-    return;
+    throw new Error("Claim verification is unavailable. Try again before finishing the lesson.", { cause: error });
   }
 
   const claimById = new Map(claims.map((claim) => [claim.id, claim]));
-  let verified = 0;
-  let contradicted = 0;
-  let uncertain = 0;
+  const repairCandidates = new Set([...previousContradictions, ...claims].map((claim) => claim.id));
+  const repairResults: VerificationResult[] = [];
+  const seen = new Set<string>();
   for (const result of Array.isArray(output.results) ? output.results : []) {
     const claim = claimById.get(result.claimId);
-    if (!claim || !["verified", "uncertain", "contradicted"].includes(result.status)) continue;
-    upsertClaim(sessionId, { ...claim, status: result.status });
-    if (result.status === "verified") verified += 1;
-    if (result.status === "contradicted") {
-      contradicted += 1;
-      addLlmFinding(sessionId, claim, result);
-    }
-    if (result.status === "uncertain") {
-      uncertain += 1;
-      queueFirstUncertainFinding(sessionId, claim, result);
+    if (!claim || seen.has(claim.id) || !["verified", "uncertain", "contradicted"].includes(result.status)) continue;
+    seen.add(claim.id);
+    const status = typeof result.sourceRef === "string" && hasPackCitation(result.sourceRef, pack) ? result.status : "uncertain";
+    const explanation = status !== result.status
+      ? "The verifier did not provide a valid reference to this pack. The claim needs review."
+      : result.explanation;
+    const misconception = status === "contradicted"
+      ? pack.misconceptions.find((item) => item.id === result.misconceptionId)
+      : undefined;
+    const updated: AtomicClaim = {
+      ...claim, status,
+      ...(misconception ? { misconceptionId: misconception.id } : {}),
+    };
+    upsertClaim(sessionId, updated);
+    if (status === "verified") repairResults.push(result);
+    if (status === "contradicted") {
+      addFinding(sessionId, {
+        id: nanoid(), sessionId, type: "factual_contradiction", severity: "major", confidence: "likely",
+        title: misconception?.statement ?? "Claim conflicts with the concept pack",
+        explanation,
+        claimIds: [claim.id], segmentIds: claim.segmentIds, nodeIds: updated.nodeIds,
+        sourceRef: misconception ? `pack:${pack.id}@${pack.version} mc:${misconception.id}` : result.sourceRef,
+        reviewStatus: "not_required",
+      });
+    } else if (status === "uncertain") {
+      addFinding(sessionId, {
+        id: nanoid(), sessionId, type: "causal_leap", severity: "moderate", confidence: "uncertain",
+        title: "Claim needs expert review", explanation: explanation || "The explanation supports this, but does not settle it.",
+        claimIds: [claim.id], segmentIds: claim.segmentIds, nodeIds: claim.nodeIds,
+        ...(result.sourceRef ? { sourceRef: result.sourceRef } : {}), reviewStatus: "queued",
+      });
     }
   }
-
+  // Classify the entire batch before applying repairs: provider result order
+  // must not determine whether a correction can resolve an earlier assertion.
+  const segmentOrder = new Map(state.segments.map((segment, index) => [segment.id, index]));
+  const isEarlier = (earlier: AtomicClaim, later: AtomicClaim): boolean => {
+    const earlierIndex = Math.max(...earlier.segmentIds.map((id) => segmentOrder.get(id) ?? Infinity));
+    const laterIndex = Math.min(...later.segmentIds.map((id) => segmentOrder.get(id) ?? -1));
+    if (earlierIndex !== laterIndex) return earlierIndex < laterIndex;
+    const text = state.segments[earlierIndex]?.text;
+    if (!text || !earlier.originalText || !later.originalText) return false;
+    const before = text.indexOf(earlier.originalText);
+    const after = text.indexOf(later.originalText);
+    return before >= 0 && after >= before + earlier.originalText.length &&
+      before === text.lastIndexOf(earlier.originalText) && after === text.lastIndexOf(later.originalText);
+  };
+  for (const result of repairResults) {
+    const claim = state.claims.find((item) => item.id === result.claimId)!;
+    const repairs = Array.isArray(result.repairedClaimIds)
+      ? [...new Set(result.repairedClaimIds)].flatMap((id) => {
+          const earlier = state.claims.find((item) => item.id === id);
+          return repairCandidates.has(id) && earlier?.status === "contradicted" && isEarlier(earlier, claim) ? [earlier] : [];
+        })
+      : [];
+    if (!repairs.length) continue;
+    upsertClaim(sessionId, {
+      ...claim, supersedesClaimId: repairs[0].id,
+      nodeIds: [...new Set([...claim.nodeIds, ...repairs.flatMap((repair) => repair.nodeIds)])],
+    });
+    for (const earlier of repairs) upsertClaim(sessionId, { ...earlier, status: "superseded" });
+  }
   emitAgentEvent(sessionId, {
-    id: nanoid(),
-    sessionId,
-    agent: "verifier",
-    message: `Verified ${verified} claims; ${contradicted} contradicted, ${uncertain} uncertain`,
-    tMs: Date.now(),
-    payload: { claimIds: claims.map((claim) => claim.id) },
+    id: nanoid(), sessionId, agent: "verifier",
+    message: `Semantically verified ${seen.size} claims against the concept pack`, tMs: Date.now(),
+    payload: { claimIds: [...seen] },
   });
+  if (seen.size !== claims.length) throw new Error("Some claims were not verified. Try again before finishing the lesson.");
 }
