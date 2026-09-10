@@ -25,6 +25,8 @@ Open [http://localhost:3000](http://localhost:3000). Runtime session snapshots a
 
 ## Architecture
 
+See [the architecture guide](docs/ARCHITECTURE.md) for implementation paths, context boundaries and storage limitations.
+
 ```text
                           CURIO LIVE REHEARSAL
 
@@ -66,7 +68,7 @@ The **learner-model loop** waits for pending claim verification before teach-bac
 
 These agents are not theater. `AgentEvent` records what each stage observed or changed; `AtomicClaim` (the claim record) carries testable evidence through verification; and `Directive` is the explicit steering instruction consumed by the novice. Those types make the hand-offs inspectable rather than implicit prompt choreography.
 
-Three context boundaries create three different minds on the same model tiers: the **novice** is knowledge-bounded, the **verifier** is pack-grounded, and the **teach-back generator** is code-isolated from the answer key. A runtime guard rejects reference-model content before teach-back generation, so separation is enforced in code rather than requested in a prompt.
+Three context boundaries create three different minds on the same model tiers: the **novice** is knowledge-bounded, the **verifier** is pack-grounded, and the **teach-back generator** is code-isolated from the answer key. A runtime guard detects selected verbatim reference strings before teach-back generation, alongside code that limits the serialized context. This is not a guarantee against every form of semantic leakage.
 
 The Next.js App Router hosts the UI and APIs. An in-memory store plus JSON snapshots holds demo sessions; SSE streams server-side agent events to the room; OpenAI Realtime handles live voice; and structured reasoning helpers support both OpenAI and Anthropic providers. Teach-back is deliberately isolated from the reference pack so Curio can reproduce only the learner beliefs it was given.
 
