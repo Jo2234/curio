@@ -1,6 +1,3 @@
-import { readFile, rename, writeFile } from "node:fs/promises";
-import path from "node:path";
-
 import { NextRequest, NextResponse } from "next/server";
 
 import type { ReviewedFinding } from "@/components/ReportView";
@@ -40,16 +37,8 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "A correction is required." }, { status: 400 });
   }
 
-  const filePath = path.join(process.cwd(), "data", "sessions", `${sessionId}.json`);
-  let diskState: SessionState;
-  try {
-    diskState = JSON.parse(await readFile(filePath, "utf8")) as SessionState;
-  } catch {
-    return Response.json({ error: "The session snapshot could not be found." }, { status: 404 });
-  }
-
-  const memoryState = getSessionState(sessionId);
-  const state = memoryState ?? diskState;
+  const state = getSessionState(sessionId);
+  if (!state) return Response.json({ error: "The session snapshot could not be found." }, { status: 404 });
   const finding = (state.findings as ReviewedFinding[]).find((item) => item.id === findingId);
   if (!finding) return Response.json({ error: "The queued finding could not be found." }, { status: 404 });
 
@@ -65,21 +54,10 @@ export async function POST(request: NextRequest) {
         : "Finding confirmed",
   };
 
-  if (memoryState) {
-    const report = (memoryState as StateWithStoredReport).session.report;
-    const reportIndex = report?.findings.findIndex((item) => item.id === findingId) ?? -1;
-    if (report && reportIndex >= 0) report.findings[reportIndex] = reviewed;
-    upsertFinding(sessionId, reviewed);
-  } else {
-    const index = diskState.findings.findIndex((item) => item.id === findingId);
-    diskState.findings[index] = reviewed;
-    const report = (diskState as StateWithStoredReport).session.report;
-    const reportIndex = report?.findings.findIndex((item) => item.id === findingId) ?? -1;
-    if (report && reportIndex >= 0) report.findings[reportIndex] = reviewed;
-    const temporaryPath = `${filePath}.${process.pid}.tmp`;
-    await writeFile(temporaryPath, `${JSON.stringify(diskState, null, 2)}\n`, "utf8");
-    await rename(temporaryPath, filePath);
-  }
+  const report = (state as StateWithStoredReport).session.report;
+  const reportIndex = Array.isArray(report?.findings) ? report.findings.findIndex((item) => item.id === findingId) : -1;
+  if (report && reportIndex >= 0) report.findings[reportIndex] = reviewed;
+  upsertFinding(sessionId, reviewed);
 
   return redirect(request, findingId);
 }

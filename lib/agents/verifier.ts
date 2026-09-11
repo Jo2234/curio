@@ -2,8 +2,8 @@ import { nanoid } from "nanoid";
 
 import { jsonCall } from "../llm";
 import { loadPack } from "../packs";
-import { addFinding, emitAgentEvent, getSessionState, upsertClaim } from "../store";
-import type { AtomicClaim, ConceptPack } from "../types";
+import { commitVerification, emitAgentEvent, getSessionState } from "../store";
+import type { AtomicClaim, ConceptPack, Finding } from "../types";
 
 interface VerificationResult {
   claimId: string;
@@ -97,6 +97,8 @@ export async function verifyNewClaims(sessionId: string): Promise<void> {
     throw new Error("Claim verification is unavailable. Try again before finishing the lesson.", { cause: error });
   }
 
+  const staged = new Map(state.claims.map(claim => [claim.id, claim]));
+  const findings: Finding[] = [];
   const claimById = new Map(claims.map((claim) => [claim.id, claim]));
   const repairCandidates = new Set([...previousContradictions, ...claims].map((claim) => claim.id));
   const repairResults: VerificationResult[] = [];
@@ -116,10 +118,10 @@ export async function verifyNewClaims(sessionId: string): Promise<void> {
       ...claim, status,
       ...(misconception ? { misconceptionId: misconception.id } : {}),
     };
-    upsertClaim(sessionId, updated);
+    staged.set(updated.id, updated);
     if (status === "verified") repairResults.push(result);
     if (status === "contradicted") {
-      addFinding(sessionId, {
+      findings.push({
         id: nanoid(), sessionId, type: "factual_contradiction", severity: "major", confidence: "likely",
         title: misconception?.statement ?? "Claim conflicts with the concept pack",
         explanation,
@@ -128,7 +130,7 @@ export async function verifyNewClaims(sessionId: string): Promise<void> {
         reviewStatus: "not_required",
       });
     } else if (status === "uncertain") {
-      addFinding(sessionId, {
+      findings.push({
         id: nanoid(), sessionId, type: "causal_leap", severity: "moderate", confidence: "uncertain",
         title: "Claim needs expert review", explanation: explanation || "The explanation supports this, but does not settle it.",
         claimIds: [claim.id], segmentIds: claim.segmentIds, nodeIds: claim.nodeIds,
@@ -151,20 +153,21 @@ export async function verifyNewClaims(sessionId: string): Promise<void> {
       before === text.lastIndexOf(earlier.originalText) && after === text.lastIndexOf(later.originalText);
   };
   for (const result of repairResults) {
-    const claim = state.claims.find((item) => item.id === result.claimId)!;
+    const claim = staged.get(result.claimId)!;
     const repairs = Array.isArray(result.repairedClaimIds)
       ? [...new Set(result.repairedClaimIds)].flatMap((id) => {
-          const earlier = state.claims.find((item) => item.id === id);
+          const earlier = staged.get(id);
           return repairCandidates.has(id) && earlier?.status === "contradicted" && isEarlier(earlier, claim) ? [earlier] : [];
         })
       : [];
     if (!repairs.length) continue;
-    upsertClaim(sessionId, {
+    staged.set(claim.id, {
       ...claim, supersedesClaimId: repairs[0].id,
       nodeIds: [...new Set([...claim.nodeIds, ...repairs.flatMap((repair) => repair.nodeIds)])],
     });
-    for (const earlier of repairs) upsertClaim(sessionId, { ...earlier, status: "superseded" });
+    for (const earlier of repairs) staged.set(earlier.id, { ...earlier, status: "superseded" });
   }
+  commitVerification(sessionId, [...staged.values()], findings);
   emitAgentEvent(sessionId, {
     id: nanoid(), sessionId, agent: "verifier",
     message: `Semantically verified ${seen.size} claims against the concept pack`, tMs: Date.now(),
