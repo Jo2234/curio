@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 import vm from 'node:vm';
 import { test, after } from 'node:test';
@@ -346,4 +348,267 @@ test('same-batch repairs use source order, including equal-timestamp claims, ind
   assert.equal(state.claims[2].status, 'contradicted', 'a correction cannot supersede a future assertion');
   assert.equal(state.conceptStates['sun-distance'], 'misconceived');
   assert.equal(state.findings.find(f => f.claimIds.includes(state.claims[0].id)).severity, 'minor');
+});
+
+
+test('a separate Node process restores saved state and subsequent mutations without model access', async () => {
+  const loader = path.join(root, 'node_modules/tsx/dist/loader.mjs');
+  const storeUrl = pathToFileURL(path.join(root, 'lib/store.ts')).href;
+  const child = body => {
+    const result = spawnSync(process.execPath, ['--import', loader, '--input-type=module', '-e', `
+      globalThis.fetch = () => { throw new Error('No network permitted'); };
+      const module = await import(${JSON.stringify(storeUrl)});
+      const store = module.default ?? module;
+      ${body}
+    `], { cwd: temp, encoding: 'utf8', env: { ...process.env, OPENAI_API_KEY: '', ANTHROPIC_API_KEY: '' } });
+    assert.equal(result.status, 0, result.stderr);
+    return JSON.parse(result.stdout);
+  };
+  const id = child(`
+    const state = store.createSession('earth-seasons', 'teacher');
+    store.addSegment(state.session.id, { id: 'restart-segment', sessionId: state.session.id, speaker: 'user', text: 'Earth has axial tilt.', tMs: 123 });
+    console.log(JSON.stringify(state.session.id));
+  `);
+  const restored = child(`
+    const state = store.getSessionState(${JSON.stringify(id)});
+    store.setPhase(state.session.id, 'questioning');
+    console.log(JSON.stringify(state));
+  `);
+  assert.equal(restored.segments[0].text, 'Earth has axial tilt.');
+  assert.equal(restored.session.phase, 'questioning');
+  const f = fixture(() => { throw new Error('Reading cannot call a model'); });
+  const store = await f.get('lib/store.ts');
+  assert.equal(store.getSessionState(id).session.phase, 'questioning');
+  const events = [];
+  const unsubscribe = store.subscribe(id, event => events.push(event));
+  assert.equal(events[0].type, 'snapshot');
+  assert.equal(events[0].data.segments[0].id, 'restart-segment');
+  unsubscribe();
+  assert.equal(f.calls.length, 0);
+});
+
+test('corrupt or mismatched snapshots fail visibly without overwriting evidence; valid sessions still load', async () => {
+  const f = fixture(() => { throw new Error('No model'); });
+  const state = (await f.get('lib/store.ts')).createSession('earth-seasons', 'teacher');
+  const valid = JSON.parse(fs.readFileSync(path.join(temp, 'data/sessions', `${state.session.id}.json`), 'utf8'));
+  for (const [index, mutate] of [
+    () => '{broken json',
+    value => { value.session.id = 'different-id'; return JSON.stringify(value); },
+    value => { value.snapshotVersion = 99; return JSON.stringify(value); },
+    value => { value.claims = [null]; return JSON.stringify(value); },
+    value => { value.claimMapperCursor = 900; return JSON.stringify(value); },
+    value => { value.session.phase = 'invented'; return JSON.stringify(value); },
+  ].entries()) {
+    const id = `corrupt-${index}`;
+    const value = structuredClone(valid);
+    value.session.id = id;
+    const content = mutate(value);
+    const file = path.join(temp, 'data/sessions', `${id}.json`);
+    fs.writeFileSync(file, content);
+    const fresh = await fixture(() => {}).get('lib/store.ts');
+    assert.throws(() => fresh.getSessionState(id), /Cannot restore session/);
+    assert.equal(fs.readFileSync(file, 'utf8'), content);
+    assert.equal(fresh.getSessionState(state.session.id).session.id, state.session.id);
+    assert.equal(fresh.getSessionState('../outside'), undefined);
+    assert.equal(fresh.getSessionState('missing'), undefined);
+    fs.unlinkSync(file);
+  }
+});
+
+test('legacy snapshots hydrate without job replay and gain a version on the next mutation', async () => {
+  const state = (await fixture(() => {}).get('lib/store.ts')).createSession('earth-seasons', 'teacher');
+  const file = path.join(temp, 'data/sessions', `${state.session.id}.json`);
+  const legacy = JSON.parse(fs.readFileSync(file, 'utf8'));
+  delete legacy.snapshotVersion;
+  delete legacy.claimMapperCursor;
+  delete legacy.evidenceRevision;
+  fs.writeFileSync(file, JSON.stringify(legacy));
+  const fresh = await fixture(() => { throw new Error('No model'); }).get('lib/store.ts');
+  assert.equal(fresh.getSessionState(state.session.id).claimMapperCursor, 0);
+  fresh.setPhase(state.session.id, 'repair');
+  assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).snapshotVersion, 1);
+});
+
+for (const interruptedStage of ['map', 'verify']) {
+  test(`restart during ${interruptedStage} resumes from the durable checkpoint without duplicate claims`, async () => {
+    const abandoned = fixture(options => kind(options) === interruptedStage ? new Promise(() => {}) : response(options));
+    const oldStore = await abandoned.get('lib/store.ts');
+    const state = oldStore.createSession('earth-seasons', 'teacher');
+    segment(oldStore, state, 'Earth has an axial tilt.', 1);
+    void (await abandoned.get('lib/agents/claimMapper.ts')).flushPipeline(state.session.id);
+    for (let turn = 0; turn < 20 && !abandoned.calls.some(call => kind(call) === interruptedStage); turn++) {
+      await new Promise(resolve => setImmediate(resolve));
+    }
+    assert(abandoned.calls.some(call => kind(call) === interruptedStage));
+    // A fresh module graph has no in-memory promise/lock from the abandoned process.
+    const restarted = fixture(response);
+    const store = await restarted.get('lib/store.ts');
+    const restored = store.getSessionState(state.session.id);
+    assert.equal(restarted.calls.length, 0, 'loading a snapshot must never run paid work');
+    assert.equal(restored.claimMapperCursor, interruptedStage === 'map' ? 0 : 1);
+    await (await restarted.get('lib/agents/pedagogy.ts')).advance(state.session.id, 'teachback');
+    assert.equal(restored.claims.length, 1);
+    assert.equal(restored.claims[0].status, 'verified');
+    assert.equal(restored.claimMapperCursor, 1);
+    assert.equal(restored.session.phase, 'teachback');
+    assert.equal(restarted.calls.filter(call => kind(call) === 'map').length, interruptedStage === 'map' ? 1 : 0);
+  });
+}
+
+test('failed atomic replacement leaves the last checkpoint intact and cleans the temporary file', async () => {
+  const f = fixture(() => {});
+  const store = await f.get('lib/store.ts');
+  const state = store.createSession('earth-seasons', 'teacher');
+  const directory = path.join(temp, 'data/sessions');
+  const file = path.join(directory, `${state.session.id}.json`);
+  const before = fs.readFileSync(file, 'utf8');
+  const failing = fixture(() => {}, { 'node:fs': { ...fs, renameSync() { throw new Error('Simulated disk replacement failure'); } } });
+  const persistence = await failing.get('lib/sessionPersistence.ts');
+  assert.throws(() => persistence.writeSnapshot(directory, { ...state, claims: [] }), /Simulated disk/);
+  assert.equal(fs.readFileSync(file, 'utf8'), before);
+  assert(!fs.readdirSync(directory).some(name => name.startsWith(state.session.id) && name.endsWith('.tmp')));
+  const snapshots = [];
+  const unsubscribe = store.subscribe(state.session.id, event => {
+    if (event.type === 'claim') snapshots.push(JSON.parse(fs.readFileSync(file, 'utf8')));
+  });
+  segment(store, state, 'Earth has tilt.', 1);
+  store.commitMappedClaims(state.session.id, [{ id: 'mapped', sessionId: state.session.id, statement: 'Earth has tilt.', originalText: 'Earth has tilt.', segmentIds: ['segment-1'], nodeIds: ['axial-tilt'], status: 'observed', createdAtMs: 1 }], 1);
+  unsubscribe();
+  assert.equal(snapshots.length, 1);
+  assert.equal(snapshots[0].claims.length, 1);
+  assert.equal(snapshots[0].claimMapperCursor, 1, 'claim event follows the same durable cursor checkpoint');
+});
+
+
+test('a restored verdict never loses its finding between claim and event notifications', async () => {
+  const f = fixture(options => {
+    const input = JSON.parse(options.user);
+    return { results: input.claims.map(item => ({ claimId: item.id, status: 'uncertain', explanation: 'Needs review', sourceRef: '', misconceptionId: null, repairedClaimIds: [] })) };
+  });
+  const store = await f.get('lib/store.ts');
+  const state = store.createSession('earth-seasons', 'teacher');
+  claim(store, state, 'There may be another reason for seasons.', 1);
+  let atVerdict;
+  const stop = store.subscribe(state.session.id, event => {
+    if (event.type === 'claim' && event.data.status === 'uncertain') {
+      atVerdict = JSON.parse(fs.readFileSync(path.join(temp, 'data/sessions', `${state.session.id}.json`), 'utf8'));
+    }
+  });
+  await (await f.get('lib/agents/verifier.ts')).verifyNewClaims(state.session.id);
+  stop();
+  assert.equal(atVerdict.findings.length, 1);
+  assert.equal(atVerdict.findings[0].claimIds[0], atVerdict.claims[0].id);
+  const fresh = await fixture(() => { throw new Error('No model'); }).get('lib/store.ts');
+  assert.equal(fresh.getSessionState(state.session.id).findings[0].reviewStatus, 'queued');
+});
+
+test('restored SSE history is not spoken again, while a new live directive is delivered once', async () => {
+  const oldGlobals = Object.fromEntries(['window', 'EventSource', 'RTCPeerConnection', 'fetch'].map(key => [key, global[key]]));
+  const previousAct = global.IS_REACT_ACT_ENVIRONMENT;
+  let source;
+  const sent = [];
+  const handlers = {};
+  const channel = { readyState: 'open', send: value => sent.push(JSON.parse(value)), close() {}, addEventListener: (name, callback) => { handlers[name] = callback; } };
+  global.window = { addEventListener() {}, removeEventListener() {}, setTimeout, clearTimeout };
+  global.EventSource = class { constructor() { source = { onmessage: null, close() {} }; return source; } close() {} };
+  global.RTCPeerConnection = class {
+    addTransceiver() {}
+    createDataChannel() { return channel; }
+    async createOffer() { return { sdp: 'synthetic-offer' }; }
+    async setLocalDescription(value) { this.localDescription = value; }
+    async setRemoteDescription() { handlers.open(); }
+    close() {}
+  };
+  global.fetch = async url => {
+    if (url === '/api/realtime/token') return Response.json({ value: 'synthetic-token' });
+    if (url === 'https://api.openai.com/v1/realtime/calls') return new Response('synthetic-answer');
+    throw new Error(`Unexpected request: ${url}`);
+  };
+  global.IS_REACT_ACT_ENVIRONMENT = true;
+  let tree;
+  try {
+    const Voice = (await fixture(() => {}).get('components/VoiceClient.tsx')).default;
+    await renderer.act(async () => { tree = renderer.create(React.createElement(Voice, { sessionId: 'restored-voice' })); });
+    const historic = { id: 'historic', kind: 'ask', utteranceInstruction: 'Old question', reason: 'old', targetNodeIds: [] };
+    const deliver = event => source.onmessage({ data: JSON.stringify(event) });
+    await renderer.act(async () => deliver({ type: 'snapshot', data: { directives: [historic] } }));
+    await renderer.act(async () => {
+      tree.root.findAllByType('button').find(button => button.children.includes('Connect Curio')).props.onClick();
+      await new Promise(resolve => setImmediate(resolve));
+    });
+    await renderer.act(async () => {
+      deliver({ type: 'directive', data: historic });
+      const fresh = { ...historic, id: 'fresh', utteranceInstruction: 'New question' };
+      deliver({ type: 'directive', data: fresh });
+      deliver({ type: 'directive', data: fresh });
+    });
+    const responses = sent.filter(event => event.type === 'response.create');
+    assert.equal(responses.length, 1);
+    assert.match(responses[0].response.instructions, /New question/);
+  } finally {
+    if (tree) await renderer.act(async () => tree.unmount());
+    for (const [key, value] of Object.entries(oldGlobals)) {
+      if (value === undefined) delete global[key]; else global[key] = value;
+    }
+    if (previousAct === undefined) delete global.IS_REACT_ACT_ENVIRONMENT; else global.IS_REACT_ACT_ENVIRONMENT = previousAct;
+  }
+});
+
+test('review isolates corrupt records and missing packs while preserving valid queued evidence', async () => {
+  const store = await fixture(() => {}).get('lib/store.ts');
+  const state = store.createSession('earth-seasons', 'teacher');
+  const finding = { id: 'queued-good', sessionId: state.session.id, type: 'causal_leap', severity: 'moderate', confidence: 'uncertain', title: 'Readable finding', explanation: 'Needs review', claimIds: [], segmentIds: [], nodeIds: [], reviewStatus: 'queued' };
+  store.addFinding(state.session.id, finding);
+  const directory = path.join(temp, 'data/sessions');
+  const corrupt = path.join(directory, 'broken-catalog.json');
+  const missing = path.join(directory, 'missing-pack.json');
+  const malformed = path.join(directory, 'bad-reference.json');
+  fs.writeFileSync(corrupt, '{broken');
+  fs.writeFileSync(missing, JSON.stringify({ ...state, session: { ...state.session, id: 'missing-pack', packId: 'not-installed' }, findings: [] }));
+  fs.writeFileSync(malformed, JSON.stringify({ ...state, session: { ...state.session, id: 'bad-reference' }, findings: [{ ...finding, sessionId: 'bad-reference', sourceRef: {} }] }));
+  try {
+    const fresh = fixture(() => { throw new Error('No models while reviewing'); });
+    const recovered = await fresh.get('lib/store.ts');
+    assert.throws(() => recovered.getSessionState('bad-reference'), /Cannot restore session/);
+    const catalog = recovered.listSessionStates();
+    assert(catalog.states.some(item => item.session.id === state.session.id));
+    assert(catalog.unavailableIds.includes('broken-catalog'));
+    assert(catalog.unavailableIds.includes('bad-reference'));
+    const review = await fresh.get('app/review/page.tsx');
+    const tree = await review.default({ searchParams: Promise.resolve({}) });
+    const html = (await import('react-dom/server')).renderToStaticMarkup(tree);
+    assert.match(html, /Some saved sessions could not be opened/);
+    assert.match(html, /Readable finding/);
+    assert.match(html, /missing-pack/);
+    assert.equal(fs.readFileSync(corrupt, 'utf8'), '{broken');
+    assert.equal(fresh.calls.length, 0);
+  } finally {
+    fs.unlinkSync(corrupt); fs.unlinkSync(missing); fs.unlinkSync(malformed);
+  }
+});
+
+test('a directory fsync failure reports uncertain durability without rolling memory behind replaced disk state', async () => {
+  let failDirectorySync = false;
+  const f = fixture(() => {}, { 'node:fs': { ...fs, fsyncSync(descriptor) {
+    if (failDirectorySync && fs.fstatSync(descriptor).isDirectory()) {
+      throw Object.assign(new Error('Simulated unsupported directory fsync'), { code: 'ENOTSUP' });
+    }
+    fs.fsyncSync(descriptor);
+  } } });
+  const store = await f.get('lib/store.ts');
+  const state = store.createSession('earth-seasons', 'teacher');
+  segment(store, state, 'Earth has tilt.', 1);
+  const mapped = { id: 'committed-claim', sessionId: state.session.id, statement: 'Earth has tilt.', originalText: 'Earth has tilt.', segmentIds: ['segment-1'], nodeIds: ['axial-tilt'], status: 'observed', createdAtMs: 1 };
+  failDirectorySync = true;
+  assert.throws(() => store.commitMappedClaims(state.session.id, [mapped], 1), /Snapshot replaced, but directory sync failed/);
+  const read = () => JSON.parse(fs.readFileSync(path.join(temp, 'data/sessions', `${state.session.id}.json`), 'utf8'));
+  assert.equal(state.claimMapperCursor, 1);
+  assert.equal(state.claims.length, 1);
+  assert.deepEqual(read().claims, state.claims);
+  const finding = { id: 'committed-finding', sessionId: state.session.id, type: 'causal_leap', severity: 'moderate', confidence: 'uncertain', title: 'Needs review', explanation: 'Fixture', claimIds: [mapped.id], segmentIds: ['segment-1'], nodeIds: ['axial-tilt'], reviewStatus: 'queued' };
+  assert.throws(() => store.commitVerification(state.session.id, [{ ...mapped, status: 'uncertain' }], [finding]), /Snapshot replaced, but directory sync failed/);
+  assert.deepEqual(read().findings, state.findings);
+  assert.equal(state.claims[0].status, 'uncertain');
+  const fresh = await fixture(() => { throw new Error('No model'); }).get('lib/store.ts');
+  assert.equal(fresh.getSessionState(state.session.id).findings[0].id, finding.id);
 });

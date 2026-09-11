@@ -11,6 +11,9 @@ files:
   - public/**/*
   - packs/**/*
   - package.json
+  - LICENSE
+  - THIRD_PARTY_NOTICES.md
+  - docs/licenses/**/*
   - "!next.config.ts"
 
 extraMetadata:

@@ -11,7 +11,8 @@
     "app": "npm run electron:compile && electron electron/dist/main.js",
     "app:package": "npm run electron:compile && electron-builder --mac dir",
     "test": "node --experimental-vm-modules --test tests/*.mjs",
-    "typecheck": "tsc --noEmit --incremental false"
+    "typecheck": "tsc --noEmit --incremental false",
+    "demo:capture": "node scripts/demo/capture.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.67.0",
@@ -34,5 +35,6 @@
     "tailwindcss": "^4",
     "tsx": "^4.23.0",
     "typescript": "^5"
-  }
+  },
+  "license": "MIT"
 }
