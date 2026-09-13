@@ -2,14 +2,14 @@
   "appBuildId": "XqszQ3iAqPF3mAPFfOya4",
   "browserVersion": "148.0.7778.96",
   "durationSeconds": 75.75,
-  "bytes": 1039746,
-  "sha256": "cee681ba0b96122320ee4b9df13507920657ea11635f3c10f0632c4027c2b8d2",
+  "bytes": 1896222,
+  "sha256": "22e6a50d742e9c2ff7c0badaf287f13fab2b91c026178825a959e38b14656635",
   "capturedAt": "2026-09-11T04:18:51.608Z",
   "viewport": {
     "width": 1280,
     "height": 720
   },
-  "mode": "Offline demonstration — model responses are fixtures",
+  "mode": "Offline demonstration \u2014 model responses are fixtures",
   "modelCallsOnRestore": 0,
   "fixtureCalls": [
     "claims",
@@ -26,7 +26,14 @@
   ],
   "sessionURL": "/session/Z8E9p5zzWxz_27tozbkRr",
   "reportURL": "/report/Z8E9p5zzWxz_27tozbkRr",
-  "audio": false,
+  "audio": true,
   "browserErrors": [],
-  "caption": "Recording-only DOM overlay; original app UI is otherwise unchanged."
+  "caption": "Recording-only DOM overlay; original app UI is otherwise unchanged.",
+  "originalCaptureAsset": {
+    "durationSeconds": 75.75,
+    "bytes": 1039746,
+    "sha256": "cee681ba0b96122320ee4b9df13507920657ea11635f3c10f0632c4027c2b8d2",
+    "audio": false
+  },
+  "postProduction": "Synthetic explanatory narration and captions added; see narration.json. The app voice connection remains disconnected."
 }
