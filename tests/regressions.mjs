@@ -569,6 +569,9 @@ test('restored SSE history is not spoken again, while a new live directive is de
     const responses = sent.filter(event => event.type === 'response.create');
     assert.equal(responses.length, 1);
     assert.match(responses[0].response.instructions, /New question/);
+    assert.match(responses[0].response.instructions, /Never lecture, supply missing facts, correct the speaker/);
+    assert.match(responses[0].response.instructions, /Ask the teacher exactly the following question/);
+    assert.match(responses[0].response.instructions, /Do not answer it/);
   } finally {
     if (tree) await renderer.act(async () => tree.unmount());
     for (const [key, value] of Object.entries(oldGlobals)) {
