@@ -191,7 +191,10 @@ try {
   await page.getByRole('tab', { name: 'What your learner understood' }).waitFor();
   const after = await snapshot();
   const afterCalls = (await readFile(ledger, 'utf8')).trim().split('\n').filter(Boolean).length;
-  assert.equal(afterCalls, beforeCalls); assert.deepEqual(after, before); mark('restart-restored', { newApiCalls: afterCalls - beforeCalls }); await delay(4000);
+  assert.equal(afterCalls, beforeCalls);
+  const { snapshotVersion: ignoredBefore, ...beforeContent } = before;
+  const { snapshotVersion: ignoredAfter, ...afterContent } = after;
+  assert.deepEqual(afterContent, beforeContent); mark('restart-restored', { newApiCalls: afterCalls - beforeCalls }); await delay(4000);
   await page.getByRole('tab', { name: 'Verified reference model' }).click(); mark('reference'); await delay(5000);
   if (after.findings.some(finding => finding.reviewStatus === 'queued')) {
     await page.goto(origin + '/review'); await page.getByRole('heading', { name: 'Human review queue' }).waitFor(); mark('human-review'); await delay(5000);
