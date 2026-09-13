@@ -35,7 +35,7 @@ const environment = {
   ...process.env, OPENAI_BASE_URL: 'https://api.openai.com/v1', ANTHROPIC_API_KEY: '',
   CURIO_DATA_DIR: path.join(output, 'data'), CURIO_API_LEDGER: ledger,
   REASONING_PROVIDER: 'openai', REASONING_MODEL: process.env.CURIO_REASONING_MODEL || 'gpt-4.1',
-  REASONING_MODEL_DEEP: process.env.CURIO_DEEP_MODEL || 'gpt-4.1', REALTIME_MODEL: process.env.CURIO_REALTIME_MODEL || 'gpt-realtime',
+  REASONING_MODEL_DEEP: process.env.CURIO_DEEP_MODEL || 'gpt-4.1', REALTIME_MODEL: process.env.CURIO_REALTIME_MODEL || 'gpt-realtime-2.1',
   NEXT_TELEMETRY_DISABLED: '1', NODE_OPTIONS: `--import=${pathToFileURL(path.join(root, 'scripts/live/observe.mjs')).href}`,
 };
 await writeFile(ledger, '', { mode: 0o600 });
