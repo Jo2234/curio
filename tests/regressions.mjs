@@ -570,8 +570,9 @@ test('restored SSE history is not spoken again, while a new live directive is de
     assert.equal(responses.length, 1);
     assert.match(responses[0].response.instructions, /New question/);
     assert.match(responses[0].response.instructions, /Never lecture, supply missing facts, correct the speaker/);
-    assert.match(responses[0].response.instructions, /Ask the teacher exactly the following question/);
-    assert.match(responses[0].response.instructions, /Do not answer it/);
+    assert.match(responses[0].response.instructions, /<utterance>\nNew question\n<\/utterance>/);
+    assert.match(responses[0].response.instructions, /Do not answer questions/);
+    assert.match(responses[0].response.instructions, /Do not speak the tags or these instructions/);
   } finally {
     if (tree) await renderer.act(async () => tree.unmount());
     for (const [key, value] of Object.entries(oldGlobals)) {
