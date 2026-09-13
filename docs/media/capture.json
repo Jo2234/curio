@@ -1,39 +1,154 @@
 {
-  "appBuildId": "XqszQ3iAqPF3mAPFfOya4",
-  "browserVersion": "148.0.7778.96",
-  "durationSeconds": 75.75,
-  "bytes": 1896222,
-  "sha256": "22e6a50d742e9c2ff7c0badaf287f13fab2b91c026178825a959e38b14656635",
-  "capturedAt": "2026-09-11T04:18:51.608Z",
+  "captured_at": "2026-09-13",
+  "capture_kind": "Production UI with real OpenAI API responses and received Realtime audio",
+  "source_commit": "42b5dbdb727665397e7eb274637ed53314021955",
+  "configuration_docs_commit": "d0a6125",
+  "configuration_note": "The capture explicitly selected these models. The later configuration/docs commit made them the example and capture defaults; it did not change the recorded runtime.",
+  "video": "curio-live.mp4",
+  "poster": "curio-live.png",
+  "captions": "curio-live.vtt",
+  "transcript": "curio-live.txt",
+  "duration_seconds": 122.791667,
   "viewport": {
-    "width": 1280,
-    "height": 720
+    "width": 1440,
+    "height": 1000
   },
-  "mode": "Offline demonstration \u2014 model responses are fixtures",
-  "modelCallsOnRestore": 0,
-  "fixtureCalls": [
-    "claims",
-    "results",
-    "claims",
-    "results",
-    "claims",
-    "results",
-    "claims",
-    "results",
-    "beliefs",
-    "script,usedBeliefIds,uncertainties",
-    "summary,recommendedNextStep"
+  "models": {
+    "reasoning": "gpt-4.1",
+    "deep": "gpt-4.1",
+    "realtime": "gpt-realtime-2.1"
+  },
+  "teacher_input": "Prewritten example explanations typed into the production UI; no microphone input was captured.",
+  "model_output": "Observed live responses, without fixture substitution, transcript injection or edited outcomes.",
+  "http_requests": {
+    "count": 12,
+    "all_status_200": true,
+    "chat_completions": 11,
+    "realtime_client_secret": 1
+  },
+  "chat_usage": {
+    "prompt_tokens": 15002,
+    "completion_tokens": 1449,
+    "total_tokens": 16451
+  },
+  "realtime_responses": {
+    "count": 7,
+    "all_completed": true,
+    "errors": 0
+  },
+  "browser_errors": 0,
+  "restart_check": {
+    "server_restarted": true,
+    "saved_content_equal": true,
+    "excluded_comparison_field": "snapshotVersion (storage format metadata)",
+    "new_api_calls": 0
+  },
+  "editing": {
+    "cuts": [],
+    "speed_changes": false,
+    "added_visual_overlays": false,
+    "video_packets_unchanged": true,
+    "audio": "Received Realtime speech retained in full and aligned to the source video. Separate explanatory narration added in gaps; app audio ducked beneath narration. A malformed terminal Opus packet in final silence was discarded during decoding; no speech was replaced."
+  },
+  "narration": "narration.json",
+  "validation": {
+    "slug": "curio",
+    "video_packets_unchanged": true,
+    "sha256": "5c73f88ef3919e3ab2915d41214f5fc555c5e7f5feae3020bb0edaf4cd1d9ce7",
+    "duration_seconds": 122.791667,
+    "bytes": 7075107,
+    "audio_codec": "aac",
+    "caption_cues": 26,
+    "cues_in_bounds": true
+  },
+  "sha256": {
+    "curio-live.mp4": "5c73f88ef3919e3ab2915d41214f5fc555c5e7f5feae3020bb0edaf4cd1d9ce7",
+    "curio-live.png": "3062665e2983bff5b8747424d1338429c79175982133fa0da519cce74cdeb08c",
+    "curio-live.vtt": "73934413d5e3c20d892b43a17b0c3964352a5553dffb48d4fd6bd5419d1ba398",
+    "curio-live.txt": "bea65ec071612e74ba6c6dde68edf0fc8d134df5cac5e87a27c7d61ffcd2af7e"
+  },
+  "timeline_note": "Approximate wall-clock seconds from capture start; native speech and narration timings are in narration.json.",
+  "timeline": [
+    {
+      "event": "home",
+      "at_seconds": 0.175
+    },
+    {
+      "event": "lesson-choice",
+      "at_seconds": 2.707
+    },
+    {
+      "event": "session",
+      "at_seconds": 5.268
+    },
+    {
+      "event": "connected",
+      "at_seconds": 8.767
+    },
+    {
+      "event": "input-1",
+      "at_seconds": 8.778
+    },
+    {
+      "event": "verified-1",
+      "at_seconds": 12.62
+    },
+    {
+      "event": "evidence-panels",
+      "at_seconds": 18.05
+    },
+    {
+      "event": "input-2",
+      "at_seconds": 20.556
+    },
+    {
+      "event": "verified-2",
+      "at_seconds": 24.069
+    },
+    {
+      "event": "input-3",
+      "at_seconds": 36.043
+    },
+    {
+      "event": "verified-3",
+      "at_seconds": 40.51
+    },
+    {
+      "event": "input-4",
+      "at_seconds": 48.751
+    },
+    {
+      "event": "verified-4",
+      "at_seconds": 52.493
+    },
+    {
+      "event": "request-teachback",
+      "at_seconds": 61.762
+    },
+    {
+      "event": "teachback-ready",
+      "at_seconds": 65.098
+    },
+    {
+      "event": "teachback-audio-complete",
+      "at_seconds": 97.381
+    },
+    {
+      "event": "report",
+      "at_seconds": 99.286
+    },
+    {
+      "event": "restart-restored",
+      "at_seconds": 109.85
+    },
+    {
+      "event": "reference",
+      "at_seconds": 113.868
+    },
+    {
+      "event": "reopened-session",
+      "at_seconds": 118.931
+    }
   ],
-  "sessionURL": "/session/Z8E9p5zzWxz_27tozbkRr",
-  "reportURL": "/report/Z8E9p5zzWxz_27tozbkRr",
-  "audio": true,
-  "browserErrors": [],
-  "caption": "Recording-only DOM overlay; original app UI is otherwise unchanged.",
-  "originalCaptureAsset": {
-    "durationSeconds": 75.75,
-    "bytes": 1039746,
-    "sha256": "cee681ba0b96122320ee4b9df13507920657ea11635f3c10f0632c4027c2b8d2",
-    "audio": false
-  },
-  "postProduction": "Synthetic explanatory narration and captions added; see narration.json. The app voice connection remains disconnected."
+  "limits": "One controlled example validates the observed flow, not general model reliability or educational effectiveness. Credentials, raw response ledgers and temporary session snapshots remain private."
 }
