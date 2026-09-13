@@ -173,6 +173,30 @@ test('invalid reference citations cannot establish knowledge or confirm a contra
   assert.equal(state.findings[0].reviewStatus, 'queued');
 });
 
+test('live verifier schema constrains citations to a single real pack reference', async () => {
+  let suppliedReference = 'pack:earth-seasons@1.0 mc:mc-distance';
+  const f = fixture(options => {
+    const references = options.schema.properties.results.items.properties.sourceRef.enum;
+    assert(references.includes(''), 'unsupported judgments can omit a citation');
+    assert(references.includes('pack:earth-seasons@1.0 node:sun-distance'));
+    assert(references.includes('pack:earth-seasons@1.0 mc:mc-distance'));
+    assert(!references.includes('pack:earth-seasons@1.0 node:invented'));
+    assert(!references.includes('pack:earth-seasons@1.0 node:sun-distance, mc:mc-distance'));
+    const input = JSON.parse(options.user);
+    return { results: [{ claimId: input.claims[0].id, status: 'contradicted', sourceRef: suppliedReference, misconceptionId: 'mc-distance', repairedClaimIds: [], explanation: 'The distance claim conflicts with the pack.' }] };
+  });
+  const store = await f.get('lib/store.ts');
+  const state = store.createSession('earth-seasons', 'teacher');
+  const verifier = await f.get('lib/agents/verifier.ts');
+  claim(store, state, 'Summer happens because Earth is closer to the Sun.', 1);
+  await verifier.verifyNewClaims(state.session.id);
+  assert.equal(state.claims[0].status, 'contradicted');
+  suppliedReference = 'pack:earth-seasons@1.0 node:sun-distance:invented';
+  claim(store, state, 'Summer happens because Earth is closer to the Sun.', 2);
+  await verifier.verifyNewClaims(state.session.id);
+  assert.equal(state.claims[1].status, 'uncertain', 'runtime validation still rejects malformed provider citations');
+});
+
 test('finish awaits in-flight verification, builds beliefs once, and refreshes after a correction', async () => {
   let release;
   const gate = new Promise(resolve => { release = resolve; });
@@ -545,6 +569,10 @@ test('restored SSE history is not spoken again, while a new live directive is de
     const responses = sent.filter(event => event.type === 'response.create');
     assert.equal(responses.length, 1);
     assert.match(responses[0].response.instructions, /New question/);
+    assert.match(responses[0].response.instructions, /Never lecture, supply missing facts, correct the speaker/);
+    assert.match(responses[0].response.instructions, /<utterance>\nNew question\n<\/utterance>/);
+    assert.match(responses[0].response.instructions, /Do not answer questions/);
+    assert.match(responses[0].response.instructions, /Do not speak the tags or these instructions/);
   } finally {
     if (tree) await renderer.act(async () => tree.unmount());
     for (const [key, value] of Object.entries(oldGlobals)) {

@@ -1,101 +1,222 @@
 {
   "generated_at": "2026-09-13",
-  "engine": "kokoro-onnx 0.6.1 / Kokoro v1.0",
+  "source_video_sha256": "621bb6353f310b63b481779a9f3302ab67377ad51ae85e12c83c478a23a2638b",
+  "output_video_sha256": "5c73f88ef3919e3ab2915d41214f5fc555c5e7f5feae3020bb0edaf4cd1d9ce7",
+  "duration_seconds": 122.791667,
+  "engine": "Kokoro v1.0 / kokoro-onnx 0.6.1",
   "voice": "af_heart",
-  "language": "en-US",
-  "purpose": "Synthetic explanatory voiceover added in post-production; not app-generated speech.",
-  "source_video_sha256": "cee681ba0b96122320ee4b9df13507920657ea11635f3c10f0632c4027c2b8d2",
-  "output_video_sha256": "22e6a50d742e9c2ff7c0badaf287f13fab2b91c026178825a959e38b14656635",
-  "source_duration_seconds": 75.75,
-  "video_stream": "Copied unchanged; no cuts or speed changes.",
-  "audio_codec": "AAC",
-  "audio_sample_rate": 24000,
+  "purpose": "Explanatory voiceover over a recording of real API-backed app execution.",
+  "video_stream": "Copied unchanged from the supplied recording; see capture provenance for edits.",
+  "app_audio": "Preserved and ducked beneath narration",
   "model_source": "https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files-v1.0",
-  "model_license": "Apache-2.0",
   "cues": [
     {
-      "start": 0.5,
-      "end": 5.3,
-      "text": "Curio tests your explanations through a simulated learner.",
-      "actual_end": 4.063,
-      "speed": 0.95
+      "start": 0.4,
+      "end": 8.3,
+      "text": "Curio tests your explanation by having you teach a learner. This lesson is about seasons.",
+      "actual_end": 6.032,
+      "speed": 0.97
     },
     {
-      "start": 5.8,
-      "end": 11.3,
-      "text": "Choose a lesson on seasons. This offline demo uses scripted model responses.",
-      "actual_end": 10.771,
-      "speed": 0.95
+      "start": 18.1,
+      "end": 21.6,
+      "text": "Every claim can be inspected.",
+      "actual_end": 19.764,
+      "speed": 0.97
     },
     {
-      "start": 11.8,
-      "end": 15.4,
-      "text": "The session opens its concept map and evidence.",
-      "actual_end": 14.616,
-      "speed": 0.95
+      "start": 59.9,
+      "end": 65.5,
+      "text": "The explanation still has gaps. Finishing asks Curio to teach it back.",
+      "actual_end": 64.273,
+      "speed": 0.97
     },
     {
-      "start": 16.0,
-      "end": 23.6,
-      "text": "A sample explanation wrongly blames summer on distance from the Sun. The claim ledger records the problem.",
-      "actual_end": 22.891,
-      "speed": 0.95
+      "start": 99.5,
+      "end": 106.5,
+      "text": "The report preserves the learner\u2019s reconstruction and highlights the remaining gaps.",
+      "actual_end": 104.129,
+      "speed": 0.97
     },
     {
-      "start": 24.0,
-      "end": 31.0,
-      "text": "The teacher corrects that claim, but leaves daylight unexplained. The map updates, and uncertainty stays visible.",
-      "actual_end": 30.677,
-      "speed": 0.979
+      "start": 109.8,
+      "end": 113.4,
+      "text": "The report survives a server restart.",
+      "actual_end": 111.976,
+      "speed": 0.97
     },
     {
-      "start": 31.6,
-      "end": 37.2,
-      "text": "Finishing the session produces a teach-back from the recorded explanation.",
-      "actual_end": 35.803,
-      "speed": 0.95
+      "start": 114.0,
+      "end": 118.4,
+      "text": "The reference answer stays in a separate tab.",
+      "actual_end": 116.453,
+      "speed": 0.97
     },
     {
-      "start": 38.0,
-      "end": 43.2,
-      "text": "The report preserves what the learner understood, including the remaining gap.",
-      "actual_end": 42.395,
-      "speed": 0.95
-    },
-    {
-      "start": 43.8,
-      "end": 48.5,
-      "text": "The learner account keeps that uncertainty visible.",
-      "actual_end": 46.595,
-      "speed": 0.95
-    },
-    {
-      "start": 49.0,
-      "end": 55.2,
-      "text": "After a real server restart, the saved report reloads with no new model calls.",
-      "actual_end": 54.035,
-      "speed": 0.95
-    },
-    {
-      "start": 55.7,
-      "end": 60.0,
-      "text": "A separate reference tab shows the complete explanation.",
-      "actual_end": 59.071,
-      "speed": 0.95
-    },
-    {
-      "start": 60.6,
-      "end": 66.0,
-      "text": "Human review keeps the unresolved claim and its transcript evidence together.",
-      "actual_end": 65.229,
-      "speed": 0.95
-    },
-    {
-      "start": 66.5,
-      "end": 74.8,
-      "text": "Finally, the original session reopens with its saved transcript. Voice would need reconnecting; earlier questions are not replayed.",
-      "actual_end": 74.457,
-      "speed": 1.011
+      "start": 118.9,
+      "end": 122.7,
+      "text": "The session reopens with its saved transcript.",
+      "actual_end": 121.396,
+      "speed": 0.97
     }
-  ]
+  ],
+  "caption_cues": [
+    {
+      "start": 0.4,
+      "end": 6.032,
+      "text": "Curio tests your explanation by having you teach a learner. This lesson is about seasons.",
+      "speaker": "Narrator"
+    },
+    {
+      "start": 10.819999694824219,
+      "end": 15.0600004196167,
+      "text": "Okay so you're saying summer happens because Earth is closer to",
+      "speaker": "Curio"
+    },
+    {
+      "start": 15.0600004196167,
+      "end": 15.699999809265137,
+      "text": "the sun",
+      "speaker": "Curio"
+    },
+    {
+      "start": 18.1,
+      "end": 19.764,
+      "text": "Every claim can be inspected.",
+      "speaker": "Narrator"
+    },
+    {
+      "start": 22.479999542236328,
+      "end": 23.1200008392334,
+      "text": "Okay",
+      "speaker": "Curio"
+    },
+    {
+      "start": 23.81999969482422,
+      "end": 25.520000457763672,
+      "text": "so the Earth has an axial tilt",
+      "speaker": "Curio"
+    },
+    {
+      "start": 26.219999313354492,
+      "end": 30.719999313354492,
+      "text": "If being closer causes summer the whole Earth is closer at once so",
+      "speaker": "Curio"
+    },
+    {
+      "start": 30.719999313354492,
+      "end": 33.52000045776367,
+      "text": "why is it winter in Australia while it's summer here",
+      "speaker": "Curio"
+    },
+    {
+      "start": 38.119998931884766,
+      "end": 42.47999954223633,
+      "text": "Okay so you're saying the seasons come from the axial tilt and",
+      "speaker": "Curio"
+    },
+    {
+      "start": 42.47999954223633,
+      "end": 45.86000061035156,
+      "text": "in summer our hemisphere is tilted toward the sun so the light is more",
+      "speaker": "Curio"
+    },
+    {
+      "start": 45.86000061035156,
+      "end": 46.20000076293945,
+      "text": "direct",
+      "speaker": "Curio"
+    },
+    {
+      "start": 51.2400016784668,
+      "end": 55.52000045776367,
+      "text": "Okay so you're not sure why the daylight hours change What",
+      "speaker": "Curio"
+    },
+    {
+      "start": 55.52000045776367,
+      "end": 59.279998779296875,
+      "text": "is different about how the sunlight reaches the ground in summer and winter",
+      "speaker": "Curio"
+    },
+    {
+      "start": 59.9,
+      "end": 64.273,
+      "text": "The explanation still has gaps. Finishing asks Curio to teach it back.",
+      "speaker": "Narrator"
+    },
+    {
+      "start": 65.5999984741211,
+      "end": 70.04000091552734,
+      "text": "I now understand that Earth has an axial tilt and it's this tilt that",
+      "speaker": "Curio"
+    },
+    {
+      "start": 70.04000091552734,
+      "end": 73.44000244140625,
+      "text": "actually causes the seasons instead of the Earth's distance from the sun",
+      "speaker": "Curio"
+    },
+    {
+      "start": 74.18000030517578,
+      "end": 78.30000305175781,
+      "text": "When it's summer our hemisphere is tilted toward the sun so sunlight hits us",
+      "speaker": "Curio"
+    },
+    {
+      "start": 78.30000305175781,
+      "end": 78.86000061035156,
+      "text": "more directly",
+      "speaker": "Curio"
+    },
+    {
+      "start": 79.72000122070312,
+      "end": 83.91999816894531,
+      "text": "Also the hours of daylight change during the different seasons I'm still",
+      "speaker": "Curio"
+    },
+    {
+      "start": 83.91999816894531,
+      "end": 88.08000183105469,
+      "text": "a bit unclear on exactly how the tilt changes the hours of daylight or the",
+      "speaker": "Curio"
+    },
+    {
+      "start": 88.08000183105469,
+      "end": 92.31999969482422,
+      "text": "specifics of how direct sunlight works but I get that the tilt is key and",
+      "speaker": "Curio"
+    },
+    {
+      "start": 92.31999969482422,
+      "end": 96.0999984741211,
+      "text": "not the Earth being closer or farther from the sun Did I get that right",
+      "speaker": "Curio"
+    },
+    {
+      "start": 99.5,
+      "end": 104.129,
+      "text": "The report preserves the learner\u2019s reconstruction and highlights the remaining gaps.",
+      "speaker": "Narrator"
+    },
+    {
+      "start": 109.8,
+      "end": 111.976,
+      "text": "The report survives a server restart.",
+      "speaker": "Narrator"
+    },
+    {
+      "start": 114.0,
+      "end": 116.453,
+      "text": "The reference answer stays in a separate tab.",
+      "speaker": "Narrator"
+    },
+    {
+      "start": 118.9,
+      "end": 121.396,
+      "text": "The session reopens with its saved transcript.",
+      "speaker": "Narrator"
+    }
+  ],
+  "app_speech_caption_method": "Whisper-1 word timestamps, reviewed against the generated speech and captured app output."
 }
